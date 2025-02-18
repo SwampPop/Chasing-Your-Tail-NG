@@ -57,9 +57,19 @@ Edit `config.json` to set:
 - WiGLE API key
 - Geographic search boundaries
 
+## Videos 
+- <a href="https://www.youtube.com/watch?v=1SmpgkE67Hc" target="_blank">https://www.youtube.com/watch?v=1SmpgkE67Hc</a>
+- <a href="https://www.youtube.com/watch?v=YRZq4PoaWeU" target="_blank">https://www.youtube.com/watch?v=YRZq4PoaWeU</a>
+- <a href="https://www.youtube.com/watch?v=nzCiOFJxbz4" target="_blank">https://www.youtube.com/watch?v=nzCiOFJxbz4</a>
+- <a href="https://www.youtube.com/watch?v=7nSFcdZ2TBo" target="_blank">https://www.youtube.com/watch?v=7nSFcdZ2TBo</a>
+
 ## Author
 
 @matt0177
+
+## Thanks
+Kismet for being amazing
+@Singe for the same reason
 
 ## License
 
