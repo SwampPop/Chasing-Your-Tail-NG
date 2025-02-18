@@ -1,6 +1,6 @@
 # Chasing Your Tail-NG
 
-A Wi-Fi probe request analyzer that helps track and analyze wireless devices in your area. Built with Python, it integrates with Kismet for packet capture and WiGLE for SSID geolocation.
+A Wi-Fi probe request analyzer that helps track and analyze wireless devices in your area to help you determine if you're being followed. Built with Python, it integrates with Kismet for packet capture and WiGLE for SSID geolocation. 
 
 ## Features
 
