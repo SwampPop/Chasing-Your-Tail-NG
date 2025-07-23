@@ -9,14 +9,18 @@ import requests
 import sqlite3
 import argparse
 
-# Load config
-with open('config.json', 'r') as f:
-    config = json.load(f)
+# Load config with secure credentials
+from secure_credentials import secure_config_loader
+config, credential_manager = secure_config_loader('config.json')
 
 class ProbeAnalyzer:
-    def __init__(self, log_dir=None, local_only=False):
+    def __init__(self, log_dir=None, local_only=True, days_back=14):
         self.log_dir = log_dir or pathlib.Path(config['paths']['log_dir'])
-        self.wigle_api_key = config.get('api_keys', {}).get('wigle', {}).get('encoded_token')
+        self.days_back = days_back
+        # Get WiGLE API key from secure storage
+        self.wigle_api_key = credential_manager.get_wigle_token()
+        if not self.wigle_api_key and not local_only:
+            print("⚠️  No WiGLE API token found in secure storage. Use --local for offline analysis.")
         self.probes = {}  # Dictionary to store probe requests {ssid: [timestamps]}
         self.local_only = local_only  # New flag for local search only
         
@@ -57,15 +61,46 @@ class ProbeAnalyzer:
                     self.probes[ssid].append(timestamp)
     
     def parse_all_logs(self):
-        """Parse all log files in the log directory"""
-        log_files = self.log_dir.glob('cyt_log_*')
+        """Parse log files in the log directory (filtered by days_back)"""
+        from datetime import datetime, timedelta
+        
+        cutoff_date = datetime.now() - timedelta(days=self.days_back)
+        all_log_files = list(self.log_dir.glob('cyt_log_*'))
+        filtered_files = []
+        
+        print(f"\nFiltering logs to past {self.days_back} days (since {cutoff_date.strftime('%Y-%m-%d')})")
+        
+        for log_file in all_log_files:
+            try:
+                # Extract date from filename: cyt_log_MMDDYY_HHMMSS
+                filename_parts = log_file.name.split('_')
+                if len(filename_parts) >= 3:
+                    date_str = filename_parts[2]  # MMDDYY
+                    if len(date_str) == 6:
+                        # Convert MMDDYY to proper date
+                        month = int(date_str[:2])
+                        day = int(date_str[2:4])
+                        year = 2000 + int(date_str[4:6])  # Convert YY to 20YY
+                        
+                        file_date = datetime(year, month, day)
+                        if file_date >= cutoff_date:
+                            filtered_files.append(log_file)
+                        else:
+                            print(f"- Skipping old file: {log_file.name} ({file_date.strftime('%Y-%m-%d')})")
+            except (ValueError, IndexError):
+                # If we can't parse the date, include the file to be safe
+                print(f"- Including file with unparseable date: {log_file.name}")
+                filtered_files.append(log_file)
+        
+        print(f"\nScanning {len(filtered_files)} recent log files (skipped {len(all_log_files) - len(filtered_files)} old files):")
+        
         log_count = 0
-        print("\nScanning log files:")
-        for log_file in log_files:
-            print(f"- Reading {log_file}")
+        for log_file in filtered_files:
+            print(f"- Reading {log_file.name}")
             self.parse_log_file(log_file)
             log_count += 1
-        print(f"\nProcessed {log_count} log files")
+        
+        print(f"\nProcessed {log_count} log files from past {self.days_back} days")
             
     def query_wigle(self, ssid):
         """Query WiGLE for information about an SSID"""
@@ -112,7 +147,7 @@ class ProbeAnalyzer:
                 "count": len(timestamps),
                 "first_seen": min(timestamps),
                 "last_seen": max(timestamps),
-                "wigle_data": self.query_wigle(ssid) if self.wigle_api_key else None
+                "wigle_data": self.query_wigle(ssid) if (self.wigle_api_key and not self.local_only) else None
             }
             results.append(result)
         return results
@@ -145,16 +180,33 @@ def main():
         print("2. Add it to config.json under api_keys->wigle")
     
     parser = argparse.ArgumentParser(description='Analyze probe requests and query WiGLE')
+    parser.add_argument('--wigle', action='store_true', 
+                      help='Enable WiGLE API queries (disabled by default to protect API keys)')
     parser.add_argument('--local', action='store_true', 
-                      help='Limit WiGLE search to configured bounding box')
+                      help='[DEPRECATED] Use --wigle to enable API calls')
+    parser.add_argument('--days', type=int, default=14,
+                      help='Number of days back to analyze (default: 14, use 0 for all logs)')
+    parser.add_argument('--all-logs', action='store_true',
+                      help='Analyze all log files (equivalent to --days 0)')
     args = parser.parse_args()
 
-    print("\nAnalyzing probe requests from CYT logs...")
-    analyzer = ProbeAnalyzer(local_only=args.local)
-    if args.local:
-        print("WiGLE search limited to configured bounding box")
+    # Handle days filtering
+    days_back = 0 if args.all_logs else args.days
+
+    print(f"\nAnalyzing probe requests from CYT logs...")
+    if days_back > 0:
+        print(f"📅 Filtering to logs from past {days_back} days")
     else:
-        print("WiGLE search will return global results")
+        print("📁 Analyzing ALL log files")
+        
+    # Default to local_only=True unless --wigle is specified
+    use_wigle = args.wigle or args.local  # Keep --local for backwards compatibility
+    analyzer = ProbeAnalyzer(local_only=not use_wigle, days_back=days_back)
+    
+    if use_wigle:
+        print("🌐 WiGLE API queries ENABLED - this will consume API credits!")
+    else:
+        print("🔒 Local analysis only (use --wigle to enable API queries)")
     analyzer.parse_all_logs()
     results = analyzer.analyze_probes()
     

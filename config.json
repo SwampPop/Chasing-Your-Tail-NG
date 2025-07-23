@@ -1,32 +1,27 @@
 {
-    "paths": {
-        "base_dir": ".",
-        "log_dir": "logs",
-        "kismet_logs": "/home/matt/kismet_logs/*.kismet",
-        "ignore_lists": {
-            "mac": "mac_list.py",
-            "ssid": "ssid_list.py"
-        }
-    },
-    "timing": {
-        "check_interval": 60,
-        "list_update_interval": 5,
-        "time_windows": {
-            "recent": 5,
-            "medium": 10,
-            "old": 15,
-            "oldest": 20
-        }
-    },
-    "api_keys": {
-        "wigle": {
-            "encoded_token": "YourWigleEncodedToken"
-        }
-    },
-    "search": {
-        "lat_min": 31.3,
-        "lat_max": 37.0,
-        "lon_min": -114.8,
-        "lon_max": -109.0
+  "paths": {
+    "base_dir": ".",
+    "log_dir": "logs",
+    "kismet_logs": "/home/matt/kismet_logs/*.kismet",
+    "ignore_lists": {
+      "mac": "mac_list.py",
+      "ssid": "ssid_list.py"
     }
+  },
+  "timing": {
+    "check_interval": 60,
+    "list_update_interval": 5,
+    "time_windows": {
+      "recent": 5,
+      "medium": 10,
+      "old": 15,
+      "oldest": 20
+    }
+  },
+  "search": {
+    "lat_min": 31.3,
+    "lat_max": 37.0,
+    "lon_min": -114.8,
+    "lon_max": -109.0
+  }
 }
