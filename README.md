@@ -228,3 +228,8 @@ MIT License
 ## Disclaimer
 
 This tool is intended for legitimate security research, network administration, and personal safety purposes. Users are responsible for complying with all applicable laws and regulations in their jurisdiction.
+---
+
+## Personal Development Fork
+
+This repository is a personal fork used for learning and development purposes. V2.0 features, including device aliasing and a persistent watchlist, are being implemented here.
