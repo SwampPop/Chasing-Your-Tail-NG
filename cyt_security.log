@@ -1,0 +1,5 @@
+2025-09-14 15:55:47,156 - INFO - Configuration loaded with secure credential management
+2025-09-14 15:55:47,157 - WARNING - MAC ignore list not found: ignore_lists/mac_list.py
+2025-09-14 15:55:47,157 - WARNING - SSID ignore list not found: ignore_lists/ssid_list.py
+2025-09-14 15:55:47,157 - INFO - Securely loaded 0 MAC addresses and 0 SSIDs
+2025-09-14 15:55:47,174 - ERROR - Fatal error during initialization: No Kismet database files found at: /home/matt/kismet_logs/*.kismet

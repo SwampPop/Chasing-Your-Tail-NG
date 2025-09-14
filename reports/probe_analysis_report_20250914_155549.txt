@@ -1,0 +1,40 @@
+CYT Probe Analysis Report
+Generated: 2025-09-14 15:55:49
+==================================================
+
+ANALYSIS OUTPUT:
+------------------------------
+
+Note: WiGLE API key not configured.
+To enable WiGLE lookups:
+1. Get an API key from wigle.net
+2. Add it to config.json under api_keys->wigle
+
+Analyzing probe requests from CYT logs...
+📅 Filtering to logs from past 14 days
+⚠️  No WiGLE API token found in secure storage. Use --local for offline analysis.
+🌐 WiGLE API queries ENABLED - this will consume API credits!
+
+Filtering logs to past 14 days (since 2025-08-31)
+
+Scanning 1 recent log files (skipped 0 old files):
+- Reading cyt_log_091425_155547
+
+Found 0 probes in logs/cyt_log_091425_155547:
+
+Processed 1 log files from past 14 days
+
+Querying WiGLE for 0 unique SSIDs...
+
+No probe requests found in logs!
+Make sure Chasing Your Tail is running and detecting probes.
+
+
+WARNINGS/ERRORS:
+------------------------------
+/Users/thomaslavoie/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+No credentials file found
+
+
+End of Report

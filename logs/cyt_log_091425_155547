@@ -1,0 +1,3 @@
+0 MACs added to ignore list.
+0 Probed SSIDs added to ignore list.
+Fatal error during initialization: No Kismet database files found at: /home/matt/kismet_logs/*.kismet
