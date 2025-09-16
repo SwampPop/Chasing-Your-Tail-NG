@@ -12,25 +12,29 @@ from kivy.graphics import Color, Rectangle
 import time
 import sqlite3
 import os
+import configparser ### CHANGED ### - Import the config parser library
 
-# Import our custom intelligence manager from our new lib folder
+# Import our custom intelligence manager
 from lib import watchlist_manager
+
+### CHANGED ### - Constants for UI strings to prevent typos
+ALERT_TYPE_DRONE = "DRONE"
+ALERT_TYPE_WATCHLIST = "ALERT"
+STATUS_MONITORING = "STATUS: MONITORING"
 
 # --- CORE LOGIC FUNCTIONS ---
 def get_chase_targets(db_path, time_window, locations_threshold):
     """
     Queries the Kismet DB to find devices seen at multiple locations within a time window.
-    This is the core "follower" detection logic.
     """
     if not os.path.exists(db_path):
-        return "DB_NOT_FOUND" # Return a specific error code
+        return "DB_NOT_FOUND"
     
     conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
     cursor = conn.cursor()
     end_time = int(time.time())
     start_time = end_time - time_window
     
-    # This query specifically looks for devices in the device_locations table
     query = """
     SELECT devmac, COUNT(DISTINCT location_uuid) as locations, MAX(last_time) as last_seen
     FROM device_locations
@@ -44,7 +48,7 @@ def get_chase_targets(db_path, time_window, locations_threshold):
         results = cursor.fetchall()
     except sqlite3.Error as e:
         print(f"Database error in get_chase_targets: {e}")
-        return "DB_ERROR" # Return a specific error code
+        return "DB_ERROR"
     finally:
         conn.close()
     return results
@@ -87,7 +91,7 @@ class AliasPopup(ModalView):
         if alias:
             notes = self.notes_input.text.strip()
             watchlist_manager.add_or_update_device(self.device_mac, alias, self.device_type, notes)
-            self.main_app.refresh_follower_list() # Tell the main screen to refresh
+            self.main_app.refresh_follower_list()
             self.dismiss()
 
 class DeviceListItem(BoxLayout):
@@ -123,13 +127,8 @@ class DeviceListItem(BoxLayout):
 class CYTApp(App):
     """The main application class that runs everything."""
     def build(self):
-        # --- PROJECT SETTINGS ---
-        # Settings are hardcoded here instead of a .conf file for simplicity.
-        # For our test, we point to the dummy database.
-        # For the real thing, you would change this path.
-        self.DB_PATH = './dummy_kismet.db' 
-        self.TIME_WINDOW = 900 # 15 minutes
-        self.LOCATIONS_THRESHOLD = 3 # Must be seen in at least 3 places
+        ### CHANGED ### - Load settings from the config file
+        self.load_settings()
         
         # --- Kivy Window Setup ---
         Config.set('graphics', 'width', '800')
@@ -138,7 +137,7 @@ class CYTApp(App):
         # --- Main Layout Construction ---
         self.main_layout = BoxLayout(orientation='vertical')
         
-        self.alert_bar = Label(text="STATUS: MONITORING", size_hint_y=0.1, color=(0, 1, 0, 1))
+        self.alert_bar = Label(text=STATUS_MONITORING, size_hint_y=0.1, color=(0, 1, 0, 1))
         self.alert_bar.font_size = '20sp'
         with self.alert_bar.canvas.before:
             Color(0.1, 0.1, 0.1, 1)
@@ -154,19 +153,36 @@ class CYTApp(App):
         
         # --- Initialize and Schedule Background Tasks ---
         watchlist_manager.initialize_database()
-        Clock.schedule_interval(self.update_followers, 5)        # Standard follower check
-        Clock.schedule_interval(self.check_watchlist, 3)         # Watchlist check
-        Clock.schedule_interval(self.check_for_drones, 4)        # High-priority drone check
+        
+        ### CHANGED ### - Use settings from config file for scheduling
+        Clock.schedule_interval(self.update_followers, self.INTERVAL_FOLLOWERS)
+        Clock.schedule_interval(self.check_watchlist, self.INTERVAL_WATCHLIST)
+        Clock.schedule_interval(self.check_for_drones, self.INTERVAL_DRONES)
         
         return self.main_layout
 
+    def load_settings(self):
+        """Loads settings from config.ini into instance variables."""
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+        
+        self.DB_PATH = config.get('Database', 'path')
+        self.TIME_WINDOW = config.getint('Analysis', 'time_window')
+        self.LOCATIONS_THRESHOLD = config.getint('Analysis', 'locations_threshold')
+        self.INTERVAL_FOLLOWERS = config.getint('Intervals', 'followers_check')
+        self.INTERVAL_WATCHLIST = config.getint('Intervals', 'watchlist_check')
+        self.INTERVAL_DRONES = config.getint('Intervals', 'drone_check')
+
     def update_followers(self, dt):
         """Periodically checks for and displays any new followers."""
+        # Note: For very long lists, clearing and re-adding all widgets can
+        # cause a flicker. A more advanced method would be to compare the
+        # new list to the old one and only change the widgets that are new or removed.
         followers = get_chase_targets(self.DB_PATH, self.TIME_WINDOW, self.LOCATIONS_THRESHOLD)
         
         self.follower_list.clear_widgets()
         
-        if isinstance(followers, str): # Display errors in the UI
+        if isinstance(followers, str):
             self.follower_list.add_widget(Label(text=f"ERROR: {followers}", font_size='20sp', color=(1,0,0,1)))
         elif not followers:
             self.follower_list.add_widget(Label(text="No followers detected.", font_size='20sp'))
@@ -179,49 +195,54 @@ class CYTApp(App):
         self.alert_rect.pos = instance.pos
         self.alert_rect.size = instance.size
 
+    ### CHANGED ### - New method to handle resetting the alert bar
+    def reset_alert_bar(self):
+        """Resets the alert bar to the default monitoring status."""
+        self.alert_bar.text = STATUS_MONITORING
+        self.alert_bar.color = (0, 1, 0, 1)
+
     def check_for_drones(self, dt):
         """High-priority check for any device Kismet has identified as a UAV."""
-        if "ALERT" in self.alert_bar.text and "DRONE" not in self.alert_bar.text:
-            return # Don't override a watchlist alert unless it's a drone
+        # Don't override a watchlist alert unless it's a drone
+        if ALERT_TYPE_WATCHLIST in self.alert_bar.text:
+            return
         
         drones = watchlist_manager.check_for_drones_seen_recently(self.DB_PATH)
         if drones:
             drone_mac, drone_name = drones[0]
             display_name = drone_name if drone_name else drone_mac
-            self.alert_bar.text = f"!!! DRONE DETECTED: {display_name} !!!"
-            self.alert_bar.color = (1, 0.5, 0, 1) # Distinct ORANGE color
+            self.alert_bar.text = f"!!! {ALERT_TYPE_DRONE} DETECTED: {display_name} !!!"
+            self.alert_bar.color = (1, 0.5, 0, 1) # Orange
         else:
-            if "DRONE" in self.alert_bar.text:
-                self.alert_bar.text = "STATUS: MONITORING"
-                self.alert_bar.color = (0, 1, 0, 1)
+            # Only reset if the current alert is a DRONE alert
+            if ALERT_TYPE_DRONE in self.alert_bar.text:
+                self.reset_alert_bar() ### CHANGED ### - Call the new refactored method
 
     def check_watchlist(self, dt):
         """Standard check for any device on our manually-created watchlist."""
-        if "DRONE" in self.alert_bar.text:
-            return # Drone alert always takes priority
+        # Drone alert always takes priority
+        if ALERT_TYPE_DRONE in self.alert_bar.text:
+            return
         
         watchlist = watchlist_manager.get_watchlist_macs()
         if not watchlist:
-            if "ALERT" in self.alert_bar.text:
-                 self.alert_bar.text = "STATUS: MONITORING"
-                 self.alert_bar.color = (0, 1, 0, 1)
+            if ALERT_TYPE_WATCHLIST in self.alert_bar.text:
+                self.reset_alert_bar() ### CHANGED ###
             return
         
         seen_macs = watchlist_manager.check_watchlist_macs_seen_recently(self.DB_PATH, watchlist)
         if seen_macs:
             alias = watchlist_manager.get_device_alias(seen_macs[0])
-            self.alert_bar.text = f"!!! ALERT: '{alias}' DETECTED NEARBY !!!"
-            self.alert_bar.color = (1, 0, 0, 1) # RED for a watchlist hit
+            self.alert_bar.text = f"!!! {ALERT_TYPE_WATCHLIST}: '{alias}' DETECTED NEARBY !!!"
+            self.alert_bar.color = (1, 0, 0, 1) # Red
         else:
-            if "ALERT" in self.alert_bar.text:
-                self.alert_bar.text = "STATUS: MONITORING"
-                self.alert_bar.color = (0, 1, 0, 1)
+            # Only reset if the current alert is a WATCHLIST alert
+            if ALERT_TYPE_WATCHLIST in self.alert_bar.text:
+                self.reset_alert_bar() ### CHANGED ###
 
     def refresh_follower_list(self):
         """A helper to manually trigger a refresh of the follower list."""
         self.update_followers(0)
 
-# This is the standard entry point to start the Kivy application
 if __name__ == '__main__':
     CYTApp().run()
-
