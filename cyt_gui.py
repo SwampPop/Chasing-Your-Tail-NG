@@ -9,7 +9,7 @@ from kivy.animation import Animation
 import time
 import sqlite3
 import os
-import configparser
+import json  # CHANGED: Import json instead of configparser
 import threading
 import logging
 
@@ -57,7 +57,6 @@ def get_chase_targets(db_path, time_window, locations_threshold):
         results = cursor.fetchall()
         return results
     except sqlite3.Error as e:
-        # Log the detailed error before raising the custom exception
         logging.error(f"A database error occurred: {e}")
         raise DatabaseQueryError(f"A database error occurred: {e}")
     finally:
@@ -65,7 +64,6 @@ def get_chase_targets(db_path, time_window, locations_threshold):
             conn.close()
 
 # --- KIVY UI CLASSES ---
-
 class AliasPopup(ModalView):
     device_mac = StringProperty('')
     device_type = StringProperty('')
@@ -80,7 +78,6 @@ class AliasPopup(ModalView):
             self.dismiss()
 
 class DeviceListItem(BoxLayout):
-    # Kivy properties that are automatically linked to the .kv file
     device_mac = StringProperty('')
     device_alias = StringProperty('')
     locations_seen = StringProperty('')
@@ -89,7 +86,6 @@ class DeviceListItem(BoxLayout):
     
     def __init__(self, device_data, **kwargs):
         super().__init__(**kwargs)
-        # Populate the properties from the device data upon creation
         self.device_mac = device_data[0]
         self.device_alias = watchlist_manager.get_device_alias(self.device_mac) or ''
         self.locations_seen = str(device_data[1])
@@ -100,7 +96,6 @@ class DeviceListItem(BoxLayout):
         popup.open()
 
 class CYTApp(App):
-    # Centralized theme colors for easy UI modification
     theme_colors = {
         "background": (0.1, 0.1, 0.1, 1),
         "text_primary": (0.9, 0.9, 0.9, 1),
@@ -110,34 +105,37 @@ class CYTApp(App):
     }
 
     def build(self):
-        # The .kv file is loaded automatically, so build() is now tiny!
         self.load_settings()
         watchlist_manager.initialize_database()
         
         Clock.schedule_interval(self.start_follower_query, self.INTERVAL_FOLLOWERS)
         Clock.schedule_interval(self.check_watchlist, self.INTERVAL_WATCHLIST)
         Clock.schedule_interval(self.check_for_drones, self.INTERVAL_DRONES)
-        
-        # Kivy automatically returns the root widget from the .kv file
     
+    # --- CHANGED: Updated to load from config.json ---
+    def load_settings(self):
+        """Loads settings from config.json into instance variables."""
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+        
+        self.DB_PATH = config['Database']['path']
+        self.TIME_WINDOW = config['Analysis']['time_window']
+        self.LOCATIONS_THRESHOLD = config['Analysis']['locations_threshold']
+        self.INTERVAL_FOLLOWERS = config['Intervals']['followers_check']
+        self.INTERVAL_WATCHLIST = config['Intervals']['watchlist_check']
+        self.INTERVAL_DRONES = config['Intervals']['drone_check']
+
     def start_follower_query(self, dt):
         """Kicks off the follower query process with an animated loading indicator."""
         self.root.ids.follower_list.clear_widgets()
         
-        # Create the label that we will animate
         loading_label = Label(text="Querying for followers...", font_size='20sp')
         self.root.ids.follower_list.add_widget(loading_label)
         
-        # Define an animation that fades the label's opacity to half, then back to full
         anim = Animation(opacity=0.5, duration=0.7) + Animation(opacity=1, duration=0.7)
-        
-        # Make the animation loop indefinitely
         anim.repeat = True
-        
-        # Start the animation on our label
         anim.start(loading_label)
     
-        # Start the background thread as before
         threading.Thread(target=self.run_follower_query_in_background, daemon=True).start()
 
     def run_follower_query_in_background(self):
@@ -165,17 +163,6 @@ class CYTApp(App):
             for device in results:
                 item = DeviceListItem(device_data=device, main_app=self)
                 follower_list.add_widget(item)
-
-    def load_settings(self):
-        """Loads settings from config.ini into instance variables."""
-        config = configparser.ConfigParser()
-        config.read('config.ini')
-        self.DB_PATH = config.get('Database', 'path')
-        self.TIME_WINDOW = config.getint('Analysis', 'time_window')
-        self.LOCATIONS_THRESHOLD = config.getint('Analysis', 'locations_threshold')
-        self.INTERVAL_FOLLOWERS = config.getint('Intervals', 'followers_check')
-        self.INTERVAL_WATCHLIST = config.getint('Intervals', 'watchlist_check')
-        self.INTERVAL_DRONES = config.getint('Intervals', 'drone_check')
 
     def reset_alert_bar(self):
         """Resets the alert bar to the default monitoring status."""
