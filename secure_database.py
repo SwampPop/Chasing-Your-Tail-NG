@@ -25,9 +25,11 @@ class SecureKismetDB:
         self.close()
     
     def connect(self) -> None:
-        """Establish secure database connection"""
+        """Establish secure, read-only database connection"""
         try:
-            self._connection = sqlite3.connect(self.db_path, timeout=30.0)
+            # CHANGED: Enforce read-only connection for safety
+            uri_path = f"file:{self.db_path}?mode=ro"
+            self._connection = sqlite3.connect(uri_path, uri=True, timeout=30.0)
             self._connection.row_factory = sqlite3.Row  # Enable column access by name
             logger.info(f"Connected to database: {self.db_path}")
         except sqlite3.Error as e:
@@ -52,17 +54,28 @@ class SecureKismetDB:
         except sqlite3.Error as e:
             logger.error(f"Database query failed: {query}, params: {params}, error: {e}")
             raise
-    
+
+    # NEW: Helper method to consolidate JSON parsing logic
+    def _parse_device_row(self, row: sqlite3.Row) -> Optional[Dict[str, Any]]:
+        """Safely parses the JSON from a device row."""
+        try:
+            device_data = None
+            if row['device']:
+                device_data = json.loads(row['device'])
+            
+            return {
+                'mac': row['devmac'],
+                'type': row['type'],
+                'device_data': device_data,
+                'last_time': row['last_time']
+            }
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"Failed to parse device JSON for {row['devmac']}: {e}")
+            return None
+
     def get_devices_by_time_range(self, start_time: float, end_time: Optional[float] = None) -> List[Dict[str, Any]]:
         """
         Get devices within time range with proper parameterization
-        
-        Args:
-            start_time: Unix timestamp for start time
-            end_time: Optional unix timestamp for end time
-            
-        Returns:
-            List of device dictionaries
         """
         if end_time is not None:
             query = "SELECT devmac, type, device, last_time FROM devices WHERE last_time >= ? AND last_time <= ?"
@@ -73,28 +86,9 @@ class SecureKismetDB:
         
         rows = self.execute_safe_query(query, params)
         
-        devices = []
-        for row in rows:
-            try:
-                # Parse device JSON safely
-                device_data = None
-                if row['device']:
-                    try:
-                        device_data = json.loads(row['device'])
-                    except (json.JSONDecodeError, TypeError) as e:
-                        logger.warning(f"Failed to parse device JSON for {row['devmac']}: {e}")
-                
-                devices.append({
-                    'mac': row['devmac'],
-                    'type': row['type'],
-                    'device_data': device_data,
-                    'last_time': row['last_time']
-                })
-            except Exception as e:
-                logger.warning(f"Error processing device row: {e}")
-                continue
-        
-        return devices
+        # CHANGED: Using the new helper method for cleaner code
+        devices = [self._parse_device_row(row) for row in rows]
+        return [d for d in devices if d is not None]
     
     def get_mac_addresses_by_time_range(self, start_time: float, end_time: Optional[float] = None) -> List[str]:
         """Get just MAC addresses for a time range"""
@@ -104,9 +98,6 @@ class SecureKismetDB:
     def get_probe_requests_by_time_range(self, start_time: float, end_time: Optional[float] = None) -> List[Dict[str, str]]:
         """
         Get probe requests with SSIDs for time range
-        
-        Returns:
-            List of dicts with 'mac', 'ssid', 'timestamp'
         """
         devices = self.get_devices_by_time_range(start_time, end_time)
         
@@ -144,7 +135,6 @@ class SecureKismetDB:
     def validate_connection(self) -> bool:
         """Validate database connection and basic structure"""
         try:
-            # Test basic query
             result = self.execute_safe_query("SELECT COUNT(*) as count FROM devices LIMIT 1")
             count = result[0]['count'] if result else 0
             logger.info(f"Database contains {count} devices")
@@ -186,7 +176,6 @@ class SecureTimeWindows:
         if not ignore_list:
             return devices
         
-        # Convert ignore list to set for O(1) lookup
         ignore_set = set(mac.upper() for mac in ignore_list)
         
         filtered = []
