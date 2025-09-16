@@ -2,7 +2,7 @@
   "paths": {
     "base_dir": ".",
     "log_dir": "logs",
-    "kismet_logs": "/home/matt/kismet_logs/*.kismet",
+    "kismet_logs": "./dummy_kismet.db",
     "ignore_lists": {
       "mac": "mac_list.py",
       "ssid": "ssid_list.py"
