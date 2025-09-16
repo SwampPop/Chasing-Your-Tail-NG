@@ -11,6 +11,8 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
+import sqlite3  # CHANGED: Moved import to top
+import math     # CHANGED: Moved import to top
 
 from surveillance_detector import SurveillanceDetector, load_appearances_from_kismet
 from gps_tracker import GPSTracker, KMLExporter, simulate_gps_data
@@ -59,7 +61,6 @@ class SurveillanceAnalyzer:
                 raise FileNotFoundError(f"No Kismet database found at: {db_pattern}")
             
             # Filter to databases modified in the past 24 hours
-            import sqlite3
             current_time = time.time()
             hours_24_ago = current_time - (self.analysis_window_hours * 3600)
             
@@ -102,7 +103,6 @@ class SurveillanceAnalyzer:
             # Extract GPS coordinates from all Kismet databases
             print("🛰️ Extracting GPS coordinates from Kismet databases...")
             try:
-                import sqlite3
                 all_gps_coords = []
                 
                 for db_file in db_files_to_process:
@@ -140,7 +140,6 @@ class SurveillanceAnalyzer:
                     for lat, lon, timestamp in all_gps_coords:
                         # Skip if too close to previous point (within ~50m)
                         if prev_lat and prev_lon:
-                            import math
                             distance = math.sqrt((lat - prev_lat)**2 + (lon - prev_lon)**2) * 111000  # rough meters
                             if distance < 50:
                                 continue
@@ -184,12 +183,12 @@ class SurveillanceAnalyzer:
         print(f"✅ Total device appearances loaded: {total_count:,}")
         
         # Perform surveillance detection
-        print("\\n🚨 Analyzing for surveillance patterns...")
+        print("\n🚨 Analyzing for surveillance patterns...")
         suspicious_devices = self.detector.analyze_surveillance_patterns()
         
         if suspicious_devices:
             print(f"⚠️ Found {len(suspicious_devices)} potentially suspicious devices!")
-            print("\\nTop suspicious devices:")
+            print("\nTop suspicious devices:")
             for i, device in enumerate(suspicious_devices[:5], 1):
                 print(f"  {i}. {device.mac} (Score: {device.persistence_score:.2f})")
                 print(f"     Appearances: {device.total_appearances}, Locations: {len(device.locations_seen)}")
@@ -202,10 +201,16 @@ class SurveillanceAnalyzer:
         # Generate reports
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Generate surveillance report
-        report_file = f"surveillance_reports/surveillance_report_{timestamp}.md"
-        html_file = f"surveillance_reports/surveillance_report_{timestamp}.html"
-        print(f"\\n📝 Generating surveillance reports:")
+        # NEW: Ensure report directories exist
+        reports_dir = "surveillance_reports"
+        kml_dir = "kml_files"
+        os.makedirs(reports_dir, exist_ok=True)
+        os.makedirs(kml_dir, exist_ok=True)
+
+        # CHANGED: Use os.path.join for robust path creation
+        report_file = os.path.join(reports_dir, f"surveillance_report_{timestamp}.md")
+        html_file = os.path.join(reports_dir, f"surveillance_report_{timestamp}.html")
+        print(f"\n📝 Generating surveillance reports:")
         print(f"   📄 Markdown: {report_file}")
         print(f"   🌐 HTML: {html_file}")
         surveillance_report = self.detector.generate_surveillance_report(report_file)
@@ -213,7 +218,7 @@ class SurveillanceAnalyzer:
         # Generate KML file if GPS data available
         kml_file = None
         if gps_data:
-            kml_file = f"kml_files/surveillance_analysis_{timestamp}.kml"
+            kml_file = os.path.join(kml_dir, f"surveillance_analysis_{timestamp}.kml")
             print(f"🗺️ Generating KML visualization: {kml_file}")
             self.kml_exporter.generate_kml(self.gps_tracker, suspicious_devices, kml_file)
             print(f"   Open in Google Earth to visualize device tracking patterns")
@@ -246,15 +251,16 @@ class SurveillanceAnalyzer:
         # Perform analysis
         results = self.analyze_kismet_data(gps_data=gps_route)
         
-        print("\\n🎪 Demo Analysis Complete!")
+        print("\n🎪 Demo Analysis Complete!")
         print("=" * 50)
         print(f"📊 Analysis Results:")
         print(f"   Total Devices: {results['total_devices']:,}")
         print(f"   Suspicious Devices: {results['suspicious_devices']}")
-        print(f"   High Threat: {results['high_threat_devices']}")
+        # CHANGED: Fixed KeyError by using the correct key
+        print(f"   High Threat: {results['high_persistence_devices']}")
         print(f"   Multi-Location Devices: {results['multi_location_devices']}")
         print(f"   Location Sessions: {results['location_sessions']}")
-        print(f"\\n📁 Generated Files:")
+        print(f"\n📁 Generated Files:")
         print(f"   📝 Report: {results['report_file']}")
         if results['kml_file']:
             print(f"   🗺️ KML: {results['kml_file']}")
@@ -274,9 +280,6 @@ class SurveillanceAnalyzer:
                 appearances = device.total_appearances
                 
                 # Stalking indicators:
-                # - Appears at 3+ different locations
-                # - High frequency of appearances
-                # - Spans multiple days
                 time_span = device.last_seen - device.first_seen
                 time_span_hours = time_span.total_seconds() / 3600
                 
@@ -314,7 +317,7 @@ class SurveillanceAnalyzer:
                     'mac': device.mac,
                     'persistence_score': device.persistence_score,
                     'total_appearances': device.total_appearances,
-                    'locations_seen': device.locations_seen,
+                    'locations_seen': list(device.locations_seen), # Ensure set is converted to list
                     'reasons': device.reasons,
                     'first_seen': device.first_seen.isoformat(),
                     'last_seen': device.last_seen.isoformat()
@@ -329,9 +332,6 @@ class SurveillanceAnalyzer:
     
     def _load_appearances_with_gps(self, db_path: str, location_id: str) -> int:
         """Load device appearances and register them with GPS tracker"""
-        import sqlite3
-        import json
-        
         try:
             with sqlite3.connect(db_path) as conn:
                 cursor = conn.cursor()
@@ -432,19 +432,19 @@ def main():
         if args.stalking_only:
             stalking_devices = analyzer.analyze_for_stalking(args.min_threat)
             if stalking_devices:
-                print(f"\\n🚨 STALKING ALERT: {len(stalking_devices)} devices with stalking patterns!")
+                print(f"\n🚨 STALKING ALERT: {len(stalking_devices)} devices with stalking patterns!")
                 for device in stalking_devices:
                     print(f"   ⚠️ {device.mac} (Stalking Score: {device.stalking_score:.2f})")
                     for reason in device.stalking_reasons:
                         print(f"      • {reason}")
             else:
-                print("\\n✅ No stalking patterns detected")
+                print("\n✅ No stalking patterns detected")
         
         # Export JSON if requested
         if args.output_json:
             analyzer.export_results_json(results, args.output_json)
         
-        print("\\n🔒 Analysis complete! Stay safe out there.")
+        print("\n🔒 Analysis complete! Stay safe out there.")
         
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
