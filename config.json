@@ -4,8 +4,8 @@
     "log_dir": "logs",
     "kismet_logs": "./dummy_kismet.db",
     "ignore_lists": {
-      "mac": "mac_list.py",
-      "ssid": "ssid_list.py"
+      "mac": "mac_list.txt",
+      "ssid": "ssid_list.txt"
     }
   },
   "timing": {
