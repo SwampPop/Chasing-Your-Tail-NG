@@ -5,11 +5,16 @@ from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.properties import StringProperty, ObjectProperty
 from kivy.clock import Clock
+from kivy.animation import Animation
 import time
 import sqlite3
 import os
 import configparser
 import threading
+import logging
+
+# --- Logging Configuration ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Import our custom intelligence manager
 from lib import watchlist_manager
@@ -52,7 +57,8 @@ def get_chase_targets(db_path, time_window, locations_threshold):
         results = cursor.fetchall()
         return results
     except sqlite3.Error as e:
-        # Wrap the original SQLite error in our custom exception
+        # Log the detailed error before raising the custom exception
+        logging.error(f"A database error occurred: {e}")
         raise DatabaseQueryError(f"A database error occurred: {e}")
     finally:
         if 'conn' in locals() and conn:
@@ -94,6 +100,15 @@ class DeviceListItem(BoxLayout):
         popup.open()
 
 class CYTApp(App):
+    # Centralized theme colors for easy UI modification
+    theme_colors = {
+        "background": (0.1, 0.1, 0.1, 1),
+        "text_primary": (0.9, 0.9, 0.9, 1),
+        "accent_red": (1, 0, 0, 1),
+        "accent_green": (0, 1, 0, 1),
+        "accent_orange": (1, 0.5, 0, 1)
+    }
+
     def build(self):
         # The .kv file is loaded automatically, so build() is now tiny!
         self.load_settings()
@@ -106,9 +121,23 @@ class CYTApp(App):
         # Kivy automatically returns the root widget from the .kv file
     
     def start_follower_query(self, dt):
-        """Kicks off the follower query process in a background thread."""
+        """Kicks off the follower query process with an animated loading indicator."""
         self.root.ids.follower_list.clear_widgets()
-        self.root.ids.follower_list.add_widget(Label(text="Querying for followers...", font_size='20sp'))
+        
+        # Create the label that we will animate
+        loading_label = Label(text="Querying for followers...", font_size='20sp')
+        self.root.ids.follower_list.add_widget(loading_label)
+        
+        # Define an animation that fades the label's opacity to half, then back to full
+        anim = Animation(opacity=0.5, duration=0.7) + Animation(opacity=1, duration=0.7)
+        
+        # Make the animation loop indefinitely
+        anim.repeat = True
+        
+        # Start the animation on our label
+        anim.start(loading_label)
+    
+        # Start the background thread as before
         threading.Thread(target=self.run_follower_query_in_background, daemon=True).start()
 
     def run_follower_query_in_background(self):
@@ -120,6 +149,7 @@ class CYTApp(App):
             followers = get_chase_targets(self.DB_PATH, self.TIME_WINDOW, self.LOCATIONS_THRESHOLD)
             Clock.schedule_once(lambda dt: self.update_ui_with_results(followers))
         except (DatabaseNotFound, DatabaseQueryError) as e:
+            logging.error(f"Follower query failed: {e}")
             Clock.schedule_once(lambda dt: self.update_ui_with_results(e))
 
     def update_ui_with_results(self, results):
@@ -128,7 +158,7 @@ class CYTApp(App):
         follower_list.clear_widgets()
         
         if isinstance(results, Exception):
-            follower_list.add_widget(Label(text=str(results), font_size='20sp', color=(1,0,0,1)))
+            follower_list.add_widget(Label(text=str(results), font_size='20sp', color=self.theme_colors['accent_red']))
         elif not results:
             follower_list.add_widget(Label(text="No followers detected.", font_size='20sp'))
         else:
@@ -150,7 +180,7 @@ class CYTApp(App):
     def reset_alert_bar(self):
         """Resets the alert bar to the default monitoring status."""
         self.root.ids.alert_bar.text = STATUS_MONITORING
-        self.root.ids.alert_bar.color = (0, 1, 0, 1)
+        self.root.ids.alert_bar.color = self.theme_colors['accent_green']
 
     def check_for_drones(self, dt):
         """High-priority check for any device Kismet has identified as a UAV."""
@@ -162,7 +192,7 @@ class CYTApp(App):
             drone_mac, drone_name = drones[0]
             display_name = drone_name if drone_name else drone_mac
             alert_bar.text = f"!!! {ALERT_TYPE_DRONE} DETECTED: {display_name} !!!"
-            alert_bar.color = (1, 0.5, 0, 1)
+            alert_bar.color = self.theme_colors['accent_orange']
         elif ALERT_TYPE_DRONE in alert_bar.text:
             self.reset_alert_bar()
 
@@ -180,7 +210,7 @@ class CYTApp(App):
         if seen_macs:
             alias = watchlist_manager.get_device_alias(seen_macs[0])
             alert_bar.text = f"!!! {ALERT_TYPE_WATCHLIST}: '{alias}' DETECTED NEARBY !!!"
-            alert_bar.color = (1, 0, 0, 1)
+            alert_bar.color = self.theme_colors['accent_red']
         elif ALERT_TYPE_WATCHLIST in alert_bar.text:
             self.reset_alert_bar()
 
