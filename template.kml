@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+<Document>
+    <name>🛡️ CYT Advanced Surveillance Detection Analysis</name>
+    <description><![CDATA[
+        <h2>🔍 Chasing Your Tail - Surveillance Detection Report</h2>
+        <p><b>📊 Generated:</b> {timestamp}</p>
+        <p><b>🎯 Analysis:</b> Advanced wireless device tracking and persistence analysis</p>
+        <p><b>🛰️ GPS Data:</b> Real-time location correlation with device appearances</p>
+        <hr>
+        <p><i>This visualization shows device tracking patterns and location-based surveillance analysis.</i></p>
+    ]]></description>
+    
+    <Style id="criticalPersistenceStyle">
+        <IconStyle>
+            <color>ff0000ff</color>
+            <Icon>
+                <href>http://maps.google.com/mapfiles/kml/shapes/target.png</href>
+            </Icon>
+            <scale>2.0</scale>
+            <hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+        </IconStyle>
+        <LabelStyle>
+            <color>ff0000ff</color>
+            <scale>1.2</scale>
+        </LabelStyle>
+        <BalloonStyle>
+            <bgColor>ffccccff</bgColor>
+            <textColor>ff000000</textColor>
+        </BalloonStyle>
+    </Style>
+    
+    <Style id="highPersistenceStyle">
+        <IconStyle>
+            <color>ff0080ff</color>
+            <Icon>
+                <href>http://maps.google.com/mapfiles/kml/shapes/warning.png</href>
+            </Icon>
+            <scale>1.7</scale>
+            <hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+        </IconStyle>
+        <LabelStyle>
+            <color>ff0080ff</color>
+            <scale>1.1</scale>
+        </LabelStyle>
+        <BalloonStyle>
+            <bgColor>ffeeccff</bgColor>
+            <textColor>ff000000</textColor>
+        </BalloonStyle>
+    </Style>
+    
+    <Style id="mediumPersistenceStyle">
+        <IconStyle>
+            <color>ff00ffff</color>
+            <Icon>
+                <href>http://maps.google.com/mapfiles/kml/shapes/info-i.png</href>
+            </Icon>
+            <scale>1.4</scale>
+            <hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+        </IconStyle>
+        <LabelStyle>
+            <color>ff00ffff</color>
+            <scale>1.0</scale>
+        </LabelStyle>
+        <BalloonStyle>
+            <bgColor>ffffffcc</bgColor>
+            <textColor>ff000000</textColor>
+        </BalloonStyle>
+    </Style>
+    
+    <Style id="primaryLocationStyle">
+        <IconStyle>
+            <color>ff00ff00</color>
+            <Icon>
+                <href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+            </Icon>
+            <scale>1.8</scale>
+            <hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+        </IconStyle>
+        <LabelStyle>
+            <color>ff00ff00</color>
+            <scale>1.3</scale>
+        </LabelStyle>
+        <BalloonStyle>
+            <bgColor>ffccffcc</bgColor>
+            <textColor>ff000000</textColor>
+        </BalloonStyle>
+    </Style>
+    
+    <Style id="secondaryLocationStyle">
+        <IconStyle>
+            <color>ff0099ff</color>
+            <Icon>
+                <href>http://maps.google.com/mapfiles/kml/shapes/placemark_square.png</href>
+            </Icon>
+            <scale>1.5</scale>
+            <hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+        </IconStyle>
+        <LabelStyle>
+            <color>ff0099ff</color>
+            <scale>1.1</scale>
+        </LabelStyle>
+    </Style>
+    
+    <Style id="criticalTrackingPath">
+        <LineStyle>
+            <color>ff0000ff</color>
+            <width>6</width>
+            <gx:outerColor>80ffffff</gx:outerColor>
+            <gx:outerWidth>8</gx:outerWidth>
+            <gx:physicalWidth>5</gx:physicalWidth>
+        </LineStyle>
+    </Style>
+    
+    <Style id="highTrackingPath">
+        <LineStyle>
+            <color>ff0080ff</color>
+            <width>4</width>
+            <gx:outerColor>80ffffff</gx:outerColor>
+            <gx:outerWidth>6</gx:outerWidth>
+            <gx:physicalWidth>3</gx:physicalWidth>
+        </LineStyle>
+    </Style>
+    
+    <Style id="mediumTrackingPath">
+        <LineStyle>
+            <color>ff00ffff</color>
+            <width>3</width>
+            <gx:outerColor>80ffffff</gx:outerColor>
+            <gx:outerWidth>4</gx:outerWidth>
+            <gx:physicalWidth>2</gx:physicalWidth>
+        </LineStyle>
+    </Style>
+    
+    <Style id="highActivityZone">
+        <PolyStyle>
+            <color>4d0000ff</color>
+            <outline>1</outline>
+        </PolyStyle>
+        <LineStyle>
+            <color>ff0000ff</color>
+            <width>2</width>
+        </LineStyle>
+    </Style>
+    
+    <Style id="mediumActivityZone">
+        <PolyStyle>
+            <color>4d0080ff</color>
+            <outline>1</outline>
+        </PolyStyle>
+        <LineStyle>
+            <color>ff0080ff</color>
+            <width>2</width>
+        </LineStyle>
+    </Style>
+    
+    {content}
+</Document>
+</kml>

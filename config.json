@@ -23,5 +23,9 @@
     "lat_max": 37.0,
     "lon_min": -114.8,
     "lon_max": -109.0
+  },
+  "gps_settings": {
+    "location_threshold_meters": 100,
+    "session_timeout_seconds": 600
   }
 }
