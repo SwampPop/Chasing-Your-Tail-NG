@@ -1,0 +1,87 @@
+#:kivy 1.11.1
+
+# This is the root widget for our application.
+# It matches the main layout we used to build in Python.
+BoxLayout:
+    orientation: 'vertical'
+    
+    Label:
+        id: alert_bar
+        text: 'STATUS: MONITORING'
+        font_size: '20sp'
+        size_hint_y: 0.1
+        color: 0, 1, 0, 1
+        canvas.before:
+            Color:
+                rgba: 0.1, 0.1, 0.1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+    ScrollView:
+        BoxLayout:
+            id: follower_list
+            orientation: 'vertical'
+            size_hint_y: None
+            height: self.minimum_height
+
+# Rule for how each item in the follower list should look
+<DeviceListItem>:
+    orientation: 'vertical'
+    padding: [10, 10, 10, 10]
+    spacing: 5
+    size_hint_y: None
+    height: 150
+    
+    # These properties are set from the Python code
+    device_mac: ''
+    device_alias: ''
+    locations_seen: ''
+    last_seen: ''
+
+    Label:
+        text: f"Device: '{root.device_alias}'" if root.device_alias else root.device_mac
+        font_size: '16sp'
+    Label:
+        text: f"Locations Seen: {root.locations_seen}"
+    Label:
+        text: f"Last Seen: {root.last_seen}"
+    Button:
+        text: "Name this Device"
+        size_hint_y: None
+        height: 40
+        on_press: root.show_alias_popup()
+
+# Rule for the Alias Popup window
+<AliasPopup>:
+    size_hint: 0.8, 0.6
+    auto_dismiss: False
+
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 10
+        spacing: 10
+        
+        Label:
+            text: f"Add to Watchlist\\nMAC: {root.device_mac}"
+            font_size: '18sp'
+        
+        TextInput:
+            id: alias_input
+            hint_text: 'Enter Alias (e.g., "Gray Honda Civic")'
+            multiline: False
+
+        TextInput:
+            id: notes_input
+            hint_text: 'Enter notes (optional)'
+
+        BoxLayout:
+            size_hint_y: None
+            height: 50
+            spacing: 10
+            Button:
+                text: "Save"
+                on_press: root.save(alias_input.text, notes_input.text)
+            Button:
+                text: "Cancel"
+                on_press: root.dismiss()
