@@ -3,68 +3,105 @@ import glob
 import json
 import os
 import pathlib
+import logging
+from typing import List, Set
 
-# Load config
-with open('config.json', 'r') as f:
-    config = json.load(f)
+# Use a logger instead of print for better feedback
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-### Check for/make subdirectories for logs, ignore lists etc.
-cyt_sub = pathlib.Path('./ignore_lists')
-cyt_sub.mkdir(parents=True, exist_ok=True)
+def find_latest_kismet_db(path_pattern: str) -> str:
+    """Finds the most recently modified file matching a glob pattern."""
+    try:
+        list_of_files = glob.glob(path_pattern)
+        if not list_of_files:
+            raise FileNotFoundError(f"No Kismet files found matching pattern: {path_pattern}")
+        latest_file = max(list_of_files, key=os.path.getctime)
+        logging.info(f"Found latest Kismet DB: {latest_file}")
+        return latest_file
+    except Exception as e:
+        logging.error(f"Could not find Kismet DB file: {e}")
+        raise
 
-non_alert_list = []
-non_alert_ssid_list = []
+def fetch_all_macs(db_path: str) -> Set[str]:
+    """Fetches all unique device MAC addresses from the Kismet DB."""
+    macs = set()
+    try:
+        # CHANGED: Use a 'with' statement to ensure the connection is always closed.
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT devmac FROM devices WHERE devmac IS NOT NULL")
+            rows = cursor.fetchall()
+            for row in rows:
+                # CHANGED: Correctly and safely extract the MAC address from the row tuple.
+                macs.add(row[0])
+    except sqlite3.Error as e:
+        logging.error(f"Database error while fetching MACs: {e}")
+    return macs
 
-### Get DB path from config
-db_path = config['paths']['kismet_logs']
+def fetch_all_probed_ssids(db_path: str) -> Set[str]:
+    """Fetches all unique probed SSIDs from the Kismet DB."""
+    ssids = set()
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            cursor = conn.cursor()
+            # Select only rows that have a device JSON blob
+            cursor.execute("SELECT device FROM devices WHERE device IS NOT NULL AND device != ''")
+            rows = cursor.fetchall()
+            for row in rows:
+                try:
+                    device_json = json.loads(row[0])
+                    # CHANGED: Safely access nested keys using .get() to avoid crashes.
+                    ssid = device_json.get("dot11.device", {})\
+                                    .get("dot11.device.last_probed_ssid_record", {})\
+                                    .get("dot11.probedssid.ssid")
+                    if ssid: # Ensure ssid is not None or an empty string
+                        ssids.add(ssid)
+                except (json.JSONDecodeError, KeyError):
+                    # Ignore rows with malformed JSON or unexpected structure
+                    continue
+    except sqlite3.Error as e:
+        logging.error(f"Database error while fetching SSIDs: {e}")
+    return ssids
 
-######Find Newest Kismet DB file
-list_of_files = glob.glob(db_path)
-latest_file = max(list_of_files, key=os.path.getctime)
-print('Pulling from: {}'.format(latest_file))
+def write_list_to_file(data: Set[str], output_path: pathlib.Path):
+    """Writes a set of items to a file, one item per line."""
+    try:
+        # CHANGED: Use a 'with' statement for safer file writing.
+        with open(output_path, "w") as f:
+            for item in sorted(list(data)):
+                f.write(f"{item}\n")
+        logging.info(f"Wrote {len(data)} items to {output_path}")
+    except IOError as e:
+        logging.error(f"Could not write to file {output_path}: {e}")
 
-con = sqlite3.connect(latest_file) ## kismet DB to point at
+def main():
+    """Main function to run the ignore list creation process."""
+    try:
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+    except (IOError, json.JSONDecodeError) as e:
+        logging.critical(f"Failed to load or parse config.json: {e}")
+        return
 
-def sql_fetch(con):
+    # Create output directory if it doesn't exist
+    output_dir = pathlib.Path('./ignore_lists')
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    cursorObj = con.cursor()
+    try:
+        db_path_pattern = config['paths']['kismet_logs']
+        latest_db = find_latest_kismet_db(db_path_pattern)
+    except (KeyError, FileNotFoundError):
+        return # Errors are already logged in the function
 
-    cursorObj.execute("SELECT devmac FROM devices")
+    # Process MAC addresses
+    mac_list = fetch_all_macs(latest_db)
+    mac_output_path = output_dir / "mac_list.txt" # CHANGED: Using .txt format
+    write_list_to_file(mac_list, mac_output_path)
 
-    rows = cursorObj.fetchall()
+    # Process SSIDs
+    ssid_list = fetch_all_probed_ssids(latest_db)
+    ssid_output_path = output_dir / "ssid_list.txt" # CHANGED: Using .txt format
+    write_list_to_file(ssid_list, ssid_output_path)
 
-    for row in rows:
-
-        #print(row)
-        stripped_val = str(row).replace("(","").replace(")","").replace("'","").replace(",","")
-        non_alert_list.append(stripped_val)
-
-sql_fetch(con)
-
-print ('Added {} MACs to the ignore list.'.format(len(non_alert_list)))
-
-# Fix - write to ignore_lists directory
-ignore_list = open(pathlib.Path('./ignore_lists') / config['paths']['ignore_lists']['mac'], "w")
-ignore_list.write("ignore_list = " + str(non_alert_list))
-ignore_list.close()
-
-def grab_all_probes(con): 
-    cursorObj = con.cursor()
-    cursorObj.execute("SELECT devmac, type, device FROM devices") 
-    rows = cursorObj.fetchall()
-    for row in rows:
-        raw_device_json = json.loads(row[2])
-        if 'dot11.probedssid.ssid' in str(row):
-            ssid_probed_for = raw_device_json["dot11.device"]["dot11.device.last_probed_ssid_record"]["dot11.probedssid.ssid"] ### Grabbed SSID Probed for
-            if ssid_probed_for == '':
-                pass
-            else:
-                non_alert_ssid_list.append(ssid_probed_for)
-
-grab_all_probes(con)
-
-print ('Added {} Probed SSIDs to the ignore list.'.format(len(non_alert_ssid_list)))
-# Fix - write to ignore_lists directory
-ignore_list_ssid = open(pathlib.Path('./ignore_lists') / config['paths']['ignore_lists']['ssid'], "w")
-ignore_list_ssid.write("non_alert_ssid_list = " + str(non_alert_ssid_list))
-ignore_list_ssid.close()
+if __name__ == "__main__":
+    main()
