@@ -19,6 +19,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Import our custom intelligence manager
 from lib import watchlist_manager
+# CHANGED: Import the custom exception from the manager
+from lib.watchlist_manager import DatabaseQueryError
 
 # --- Constants & Exceptions ---
 ALERT_TYPE_DRONE = "DRONE"
@@ -27,37 +29,32 @@ STATUS_MONITORING = "STATUS: MONITORING"
 
 class DatabaseNotFound(Exception):
     pass
-class DatabaseQueryError(Exception):
-    pass
+# We no longer need to define DatabaseQueryError here, as we import it
 
 # --- CORE LOGIC FUNCTION ---
 def get_chase_targets(db_path, time_window, locations_threshold):
     if not os.path.exists(db_path):
         raise DatabaseNotFound(f"Error: The database file could not be found at '{db_path}'")
     try:
-        conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
-        cursor = conn.cursor()
-        end_time = int(time.time())
-        start_time = end_time - time_window
-        query = """
-        SELECT devmac, COUNT(DISTINCT location_uuid) as locations, MAX(last_time) as last_seen
-        FROM device_locations
-        WHERE last_time > ?
-        GROUP BY devmac
-        HAVING locations >= ?
-        ORDER BY last_seen DESC
-        """
-        cursor.execute(query, (start_time, locations_threshold))
-        results = cursor.fetchall()
-        return results
+        with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
+            cursor = conn.cursor()
+            end_time = int(time.time())
+            start_time = end_time - time_window
+            query = """
+            SELECT devmac, COUNT(DISTINCT location_uuid) as locations, MAX(last_time) as last_seen
+            FROM device_locations
+            WHERE last_time > ?
+            GROUP BY devmac
+            HAVING locations >= ?
+            ORDER BY last_seen DESC
+            """
+            cursor.execute(query, (start_time, locations_threshold))
+            return cursor.fetchall()
     except sqlite3.Error as e:
         logging.error(f"A database error occurred: {e}")
         raise DatabaseQueryError(f"A database error occurred: {e}")
-    finally:
-        if 'conn' in locals() and conn:
-            conn.close()
 
-# --- KIVY UI CLASSES ---
+# --- KIVY UI CLASSES (No changes in this section) ---
 class AliasPopup(ModalView):
     device_mac = StringProperty('')
     device_type = StringProperty('')
@@ -97,24 +94,26 @@ class CYTApp(App):
 
     def build(self):
         self.load_settings()
-        watchlist_manager.initialize_database()
+        try:
+            watchlist_manager.initialize_database()
+        except DatabaseQueryError as e:
+            logging.critical(f"CRITICAL: Could not initialize watchlist DB. Alerts will fail. Error: {e}")
+        
         Clock.schedule_interval(self.start_follower_query, self.INTERVAL_FOLLOWERS)
         Clock.schedule_interval(self.check_watchlist, self.INTERVAL_WATCHLIST)
         Clock.schedule_interval(self.check_for_drones, self.INTERVAL_DRONES)
     
-    def load_settings(self):
-        """Loads settings from config.json and finds the latest Kismet log."""
+    def load_settings(self, *args):
+        # ... (This function remains the same)
         with open('config.json', 'r') as f:
             config = json.load(f)
-        
         kismet_log_path_pattern = config['paths']['kismet_logs']
         if "*" in kismet_log_path_pattern:
             try:
                 list_of_files = glob.glob(kismet_log_path_pattern)
                 if not list_of_files:
                     raise FileNotFoundError(f"No Kismet files found matching pattern: {kismet_log_path_pattern}")
-                latest_file = max(list_of_files, key=os.path.getctime)
-                self.DB_PATH = latest_file
+                self.DB_PATH = max(list_of_files, key=os.path.getctime)
                 logging.info(f"Using latest Kismet DB: {self.DB_PATH}")
             except FileNotFoundError as e:
                 self.DB_PATH = "NOT_FOUND"
@@ -122,7 +121,6 @@ class CYTApp(App):
         else:
             self.DB_PATH = kismet_log_path_pattern
             logging.info(f"Using direct Kismet DB path: {self.DB_PATH}")
-
         self.TIME_WINDOW = config['timing']['time_windows']['recent'] * 60
         check_interval = config['timing']['check_interval']
         self.INTERVAL_FOLLOWERS = check_interval
@@ -131,6 +129,7 @@ class CYTApp(App):
         self.LOCATIONS_THRESHOLD = 3
 
     def start_follower_query(self, dt):
+        # ... (This function remains the same)
         self.root.ids.follower_list.clear_widgets()
         loading_label = Label(text="Querying for followers...", font_size='20sp')
         self.root.ids.follower_list.add_widget(loading_label)
@@ -140,15 +139,16 @@ class CYTApp(App):
         threading.Thread(target=self.run_follower_query_in_background, daemon=True).start()
 
     def run_follower_query_in_background(self):
+        # ... (This function remains the same)
         try:
             followers = get_chase_targets(self.DB_PATH, self.TIME_WINDOW, self.LOCATIONS_THRESHOLD)
             Clock.schedule_once(lambda dt: self.update_ui_with_results(followers))
         except (DatabaseNotFound, DatabaseQueryError) as e:
             logging.error(f"Follower query failed: {e}")
-            # --- THIS IS THE BUG FIX ---
             Clock.schedule_once(lambda dt, exception=e: self.update_ui_with_results(exception))
 
     def update_ui_with_results(self, results):
+        # ... (This function remains the same)
         follower_list = self.root.ids.follower_list
         follower_list.clear_widgets()
         if isinstance(results, Exception):
@@ -164,32 +164,40 @@ class CYTApp(App):
         self.root.ids.alert_bar.text = STATUS_MONITORING
         self.root.ids.alert_bar.color = self.theme_colors['accent_green']
 
+    # --- CHANGED: Added error handling for drone and watchlist checks ---
     def check_for_drones(self, dt):
         alert_bar = self.root.ids.alert_bar
         if ALERT_TYPE_WATCHLIST in alert_bar.text: return
-        drones = watchlist_manager.check_for_drones_seen_recently(self.DB_PATH)
-        if drones:
-            drone_mac, drone_name = drones[0]
-            display_name = drone_name if drone_name else drone_mac
-            alert_bar.text = f"!!! {ALERT_TYPE_DRONE} DETECTED: {display_name} !!!"
-            alert_bar.color = self.theme_colors['accent_orange']
-        elif ALERT_TYPE_DRONE in alert_bar.text:
-            self.reset_alert_bar()
+        try:
+            drones = watchlist_manager.check_for_drones_seen_recently(self.DB_PATH)
+            if drones:
+                drone_mac, drone_name = drones[0]
+                display_name = drone_name if drone_name else drone_mac
+                alert_bar.text = f"!!! {ALERT_TYPE_DRONE} DETECTED: {display_name} !!!"
+                alert_bar.color = self.theme_colors['accent_orange']
+            elif ALERT_TYPE_DRONE in alert_bar.text:
+                self.reset_alert_bar()
+        except DatabaseQueryError as e:
+            logging.warning(f"Could not check for drones: {e}")
 
     def check_watchlist(self, dt):
         alert_bar = self.root.ids.alert_bar
         if ALERT_TYPE_DRONE in alert_bar.text: return
-        watchlist = watchlist_manager.get_watchlist_macs()
-        if not watchlist:
-            if ALERT_TYPE_WATCHLIST in alert_bar.text: self.reset_alert_bar()
-            return
-        seen_macs = watchlist_manager.check_watchlist_macs_seen_recently(self.DB_PATH, watchlist)
-        if seen_macs:
-            alias = watchlist_manager.get_device_alias(seen_macs[0])
-            alert_bar.text = f"!!! {ALERT_TYPE_WATCHLIST}: '{alias}' DETECTED NEARBY !!!"
-            alert_bar.color = self.theme_colors['accent_red']
-        elif ALERT_TYPE_WATCHLIST in alert_bar.text:
-            self.reset_alert_bar()
+        try:
+            watchlist = watchlist_manager.get_watchlist_macs()
+            if not watchlist:
+                if ALERT_TYPE_WATCHLIST in alert_bar.text: self.reset_alert_bar()
+                return
+            
+            seen_macs = watchlist_manager.check_watchlist_macs_seen_recently(self.DB_PATH, watchlist)
+            if seen_macs:
+                alias = watchlist_manager.get_device_alias(seen_macs[0])
+                alert_bar.text = f"!!! {ALERT_TYPE_WATCHLIST}: '{alias}' DETECTED NEARBY !!!"
+                alert_bar.color = self.theme_colors['accent_red']
+            elif ALERT_TYPE_WATCHLIST in alert_bar.text:
+                self.reset_alert_bar()
+        except DatabaseQueryError as e:
+            logging.warning(f"Could not check watchlist: {e}")
 
     def refresh_follower_list(self):
         self.start_follower_query(0)
