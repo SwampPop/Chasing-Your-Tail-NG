@@ -27,5 +27,9 @@
   "gps_settings": {
     "location_threshold_meters": 100,
     "session_timeout_seconds": 600
+  },
+  "alert_settings": {
+    "drone_time_window_seconds": 300,
+    "watchlist_time_window_seconds": 300
   }
 }

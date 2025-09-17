@@ -6,38 +6,25 @@ import logging
 class DatabaseQueryError(Exception):
     pass
 
-# --- DATABASE SETUP ---
 db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'watchlist.db')
 
-# --- WATCHLIST & ALIASING PROCEDURES ---
-
 def initialize_database():
-    """Prepares a new intelligence file."""
+    # ... (this function is unchanged)
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS devices (
-                    mac TEXT PRIMARY KEY,
-                    alias TEXT NOT NULL,
-                    device_type TEXT,
-                    notes TEXT
-                )
-            ''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS devices (mac TEXT PRIMARY KEY, alias TEXT NOT NULL, device_type TEXT, notes TEXT)''')
             conn.commit()
     except sqlite3.Error as e:
         logging.error(f"Failed to initialize watchlist database: {e}")
         raise DatabaseQueryError(f"Failed to initialize watchlist DB: {e}")
 
 def add_or_update_device(mac, alias, device_type, notes=""):
-    """Makes a new entry in the intelligence file."""
+    # ... (this function is unchanged)
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                INSERT OR REPLACE INTO devices (mac, alias, device_type, notes)
-                VALUES (?, ?, ?, ?)
-            ''', (mac, alias, device_type, notes))
+            cursor.execute('''INSERT OR REPLACE INTO devices (mac, alias, device_type, notes) VALUES (?, ?, ?, ?)''', (mac, alias, device_type, notes))
             conn.commit()
         logging.info(f"Watchlist Updated: {mac} as '{alias}'")
     except sqlite3.Error as e:
@@ -45,9 +32,8 @@ def add_or_update_device(mac, alias, device_type, notes=""):
         raise DatabaseQueryError(f"Failed to update watchlist: {e}")
 
 def get_watchlist_macs():
-    """Gets the list of all MAC addresses on the watchlist."""
-    if not os.path.exists(db_path):
-        return []
+    # ... (this function is unchanged)
+    if not os.path.exists(db_path): return []
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
@@ -58,9 +44,8 @@ def get_watchlist_macs():
         raise DatabaseQueryError(f"Failed to read watchlist: {e}")
 
 def get_device_alias(mac):
-    """Gets the alias for a specific MAC address."""
-    if not os.path.exists(db_path):
-        return None
+    # ... (this function is unchanged)
+    if not os.path.exists(db_path): return None
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
@@ -71,8 +56,8 @@ def get_device_alias(mac):
         logging.error(f"Failed to get alias for {mac}: {e}")
         raise DatabaseQueryError(f"Failed to read alias: {e}")
 
-def check_watchlist_macs_seen_recently(kismet_db_path, mac_list, time_window_seconds=30):
-    """Cross-references the watchlist with the live Kismet feed."""
+# --- CHANGED: This function now accepts a time_window_seconds parameter ---
+def check_watchlist_macs_seen_recently(kismet_db_path, mac_list, time_window_seconds):
     if not mac_list or not os.path.exists(kismet_db_path) or kismet_db_path == "NOT_FOUND":
         return []
     
@@ -89,13 +74,11 @@ def check_watchlist_macs_seen_recently(kismet_db_path, mac_list, time_window_sec
         logging.error(f"Database error checking watchlist in Kismet DB: {e}")
         raise DatabaseQueryError(f"Failed to check watchlist: {e}")
 
-def check_for_drones_seen_recently(kismet_db_path, time_window_seconds=10):
-    """Scans the live Kismet feed for any confirmed drones."""
+# --- CHANGED: This function now accepts a time_window_seconds parameter ---
+def check_for_drones_seen_recently(kismet_db_path, time_window_seconds):
     if not os.path.exists(kismet_db_path) or kismet_db_path == "NOT_FOUND":
         return []
     
-    # CHANGED: The query no longer selects the non-existent 'commonname' column.
-    # It now selects 'devmac' twice to satisfy the code that expects two return values.
     query = "SELECT devmac, devmac FROM devices WHERE type = 'UAV' AND last_time > ?"
     
     try:
