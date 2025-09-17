@@ -44,7 +44,6 @@ def add_or_update_device(mac, alias, device_type, notes=""):
         logging.error(f"Failed to update device {mac} in watchlist: {e}")
         raise DatabaseQueryError(f"Failed to update watchlist: {e}")
 
-# --- ADDED: The missing function has been restored ---
 def get_watchlist_macs():
     """Gets the list of all MAC addresses on the watchlist."""
     if not os.path.exists(db_path):
@@ -95,7 +94,9 @@ def check_for_drones_seen_recently(kismet_db_path, time_window_seconds=10):
     if not os.path.exists(kismet_db_path) or kismet_db_path == "NOT_FOUND":
         return []
     
-    query = "SELECT devmac, commonname FROM devices WHERE type = 'UAV' AND last_time > ?"
+    # CHANGED: The query no longer selects the non-existent 'commonname' column.
+    # It now selects 'devmac' twice to satisfy the code that expects two return values.
+    query = "SELECT devmac, devmac FROM devices WHERE type = 'UAV' AND last_time > ?"
     
     try:
         with sqlite3.connect(f'file:{kismet_db_path}?mode=ro', uri=True) as conn:
