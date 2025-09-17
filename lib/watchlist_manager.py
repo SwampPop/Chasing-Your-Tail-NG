@@ -3,17 +3,16 @@ import os
 import time
 import logging
 
-# NEW: Define the custom exception that this module can raise.
 class DatabaseQueryError(Exception):
     pass
 
 # --- DATABASE SETUP ---
 db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'watchlist.db')
 
-# --- V2.0 WATCHLIST & ALIASING PROCEDURES ---
+# --- WATCHLIST & ALIASING PROCEDURES ---
 
 def initialize_database():
-    """PROCEDURE: Prepare a new intelligence file."""
+    """Prepares a new intelligence file."""
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
@@ -30,5 +29,80 @@ def initialize_database():
         logging.error(f"Failed to initialize watchlist database: {e}")
         raise DatabaseQueryError(f"Failed to initialize watchlist DB: {e}")
 
-# ... (the rest of this file's content is unchanged) ...
-# (add_or_update_device, get_watchlist_macs, etc. all remain the same)
+def add_or_update_device(mac, alias, device_type, notes=""):
+    """Makes a new entry in the intelligence file."""
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO devices (mac, alias, device_type, notes)
+                VALUES (?, ?, ?, ?)
+            ''', (mac, alias, device_type, notes))
+            conn.commit()
+        logging.info(f"Watchlist Updated: {mac} as '{alias}'")
+    except sqlite3.Error as e:
+        logging.error(f"Failed to update device {mac} in watchlist: {e}")
+        raise DatabaseQueryError(f"Failed to update watchlist: {e}")
+
+# --- ADDED: The missing function has been restored ---
+def get_watchlist_macs():
+    """Gets the list of all MAC addresses on the watchlist."""
+    if not os.path.exists(db_path):
+        return []
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT mac FROM devices")
+            return [row[0] for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        logging.error(f"Failed to get watchlist MACs: {e}")
+        raise DatabaseQueryError(f"Failed to read watchlist: {e}")
+
+def get_device_alias(mac):
+    """Gets the alias for a specific MAC address."""
+    if not os.path.exists(db_path):
+        return None
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT alias FROM devices WHERE mac = ?", (mac,))
+            result = cursor.fetchone()
+            return result[0] if result else None
+    except sqlite3.Error as e:
+        logging.error(f"Failed to get alias for {mac}: {e}")
+        raise DatabaseQueryError(f"Failed to read alias: {e}")
+
+def check_watchlist_macs_seen_recently(kismet_db_path, mac_list, time_window_seconds=30):
+    """Cross-references the watchlist with the live Kismet feed."""
+    if not mac_list or not os.path.exists(kismet_db_path) or kismet_db_path == "NOT_FOUND":
+        return []
+    
+    placeholders = ','.join('?' for _ in mac_list)
+    query = f"SELECT devmac FROM devices WHERE devmac IN ({placeholders}) AND last_time > ?"
+    
+    try:
+        with sqlite3.connect(f'file:{kismet_db_path}?mode=ro', uri=True) as conn:
+            cursor = conn.cursor()
+            time_threshold = int(time.time()) - time_window_seconds
+            cursor.execute(query, mac_list + [time_threshold])
+            return [row[0] for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        logging.error(f"Database error checking watchlist in Kismet DB: {e}")
+        raise DatabaseQueryError(f"Failed to check watchlist: {e}")
+
+def check_for_drones_seen_recently(kismet_db_path, time_window_seconds=10):
+    """Scans the live Kismet feed for any confirmed drones."""
+    if not os.path.exists(kismet_db_path) or kismet_db_path == "NOT_FOUND":
+        return []
+    
+    query = "SELECT devmac, commonname FROM devices WHERE type = 'UAV' AND last_time > ?"
+    
+    try:
+        with sqlite3.connect(f'file:{kismet_db_path}?mode=ro', uri=True) as conn:
+            cursor = conn.cursor()
+            time_threshold = int(time.time()) - time_window_seconds
+            cursor.execute(query, [time_threshold])
+            return cursor.fetchall()
+    except sqlite3.Error as e:
+        logging.error(f"Database error checking for drones in Kismet DB: {e}")
+        raise DatabaseQueryError(f"Failed to check for drones: {e}")
