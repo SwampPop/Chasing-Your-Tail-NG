@@ -1,7 +1,6 @@
 #:kivy 1.11.1
 
 # This is the root widget for our application.
-# It matches the main layout we used to build in Python.
 BoxLayout:
     orientation: 'vertical'
     
@@ -33,19 +32,23 @@ BoxLayout:
     size_hint_y: None
     height: 150
     
-    # These properties are set from the Python code
     device_mac: ''
     device_alias: ''
     locations_seen: ''
     last_seen: ''
+    # This new property will be set in the Python file
+    display_name: ''
 
     Label:
-        text: f"Device: '{root.device_alias}'" if root.device_alias else root.device_mac
+        # CHANGED: Replaced complex f-string with a simple property
+        text: "Device: " + root.display_name
         font_size: '16sp'
     Label:
-        text: f"Locations Seen: {root.locations_seen}"
+        # CHANGED: Replaced f-string with concatenation
+        text: "Locations Seen: " + root.locations_seen
     Label:
-        text: f"Last Seen: {root.last_seen}"
+        # CHANGED: Replaced f-string with concatenation
+        text: "Last Seen: " + root.last_seen
     Button:
         text: "Name this Device"
         size_hint_y: None
@@ -63,7 +66,8 @@ BoxLayout:
         spacing: 10
         
         Label:
-            text: f"Add to Watchlist\\nMAC: {root.device_mac}"
+            # CHANGED: Replaced f-string with concatenation
+            text: "Add to Watchlist\\nMAC: " + root.device_mac
             font_size: '18sp'
         
         TextInput:
