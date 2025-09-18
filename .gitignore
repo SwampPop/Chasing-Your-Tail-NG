@@ -1,0 +1,17 @@
+# Build artifacts
+kismet_build/
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+
+# Log files
+*.log
+logs/
+
+# Temporary databases
+dummy_kismet.db
+watchlist.db
