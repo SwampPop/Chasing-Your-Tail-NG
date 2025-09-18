@@ -2,7 +2,7 @@
   "paths": {
     "base_dir": ".",
     "log_dir": "logs",
-    "kismet_logs": "/opt/local/var/log/kismet/*.kismet",
+    "kismet_logs": "./*.kismet",
     "ignore_lists": {
       "mac": "mac_list.txt",
       "ssid": "ssid_list.txt"

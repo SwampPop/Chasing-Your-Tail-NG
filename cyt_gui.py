@@ -1,4 +1,3 @@
-# ... (all imports remain the same)
 import kivy
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -15,34 +14,54 @@ import threading
 import logging
 import glob
 
-# ... (logging config, custom exceptions, constants, and get_chase_targets function are unchanged)
+# --- Logging Configuration ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-class DatabaseNotFound(Exception): pass
+
+# --- Custom Exception ---
+class DatabaseNotFound(Exception):
+    pass
+
+# --- Import from custom modules ---
 from lib import watchlist_manager
 from lib.watchlist_manager import DatabaseQueryError
+
+# --- Constants ---
 ALERT_TYPE_DRONE = "DRONE"
 ALERT_TYPE_WATCHLIST = "ALERT"
 STATUS_MONITORING = "STATUS: MONITORING"
+
+# --- CORE LOGIC FUNCTION ---
 def get_chase_targets(db_path, time_window, locations_threshold):
-    # ... (function content is unchanged)
-    if not os.path.exists(db_path):
+    """Queries the Kismet DB for devices meeting follower criteria using the modern schema."""
+    if not os.path.exists(db_path) or db_path == "NOT_FOUND":
         raise DatabaseNotFound(f"Error: The database file could not be found at '{db_path}'")
     try:
         with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
             cursor = conn.cursor()
             end_time = int(time.time())
             start_time = end_time - time_window
-            query = """SELECT devmac, COUNT(DISTINCT location_uuid) as locations, MAX(last_time) as last_seen FROM device_locations WHERE last_time > ? GROUP BY devmac HAVING locations >= ? ORDER BY last_seen DESC"""
+            
+            # This new query uses the 'packets' table and looks at the datasource as the "location".
+            query = """
+            SELECT sourcemac as devmac, COUNT(DISTINCT datasource) as locations, MAX(ts_sec) as last_seen
+            FROM packets
+            WHERE sourcemac IS NOT NULL AND sourcemac != '00:00:00:00:00:00' AND ts_sec > ?
+            GROUP BY sourcemac
+            HAVING locations >= ?
+            ORDER BY last_seen DESC
+            """
             cursor.execute(query, (start_time, locations_threshold))
             return cursor.fetchall()
     except sqlite3.Error as e:
         logging.error(f"A database error occurred in get_chase_targets: {e}")
         raise DatabaseQueryError(f"A database error occurred in get_chase_targets: {e}")
 
-# --- (Kivy UI classes are unchanged) ---
+# --- KIVY UI CLASSES ---
 class AliasPopup(ModalView):
-    # ... (class content is unchanged)
-    device_mac = StringProperty(''); device_type = StringProperty(''); main_app = ObjectProperty(None)
+    device_mac = StringProperty('')
+    device_type = StringProperty('')
+    main_app = ObjectProperty(None)
+
     def save(self, alias, notes):
         alias = alias.strip()
         if alias:
@@ -50,40 +69,60 @@ class AliasPopup(ModalView):
             try:
                 watchlist_manager.add_or_update_device(self.device_mac, alias, self.device_type, notes)
                 self.main_app.refresh_follower_list()
-            except DatabaseQueryError as e: logging.error(f"Could not save alias: {e}")
+            except DatabaseQueryError as e:
+                logging.error(f"Could not save alias: {e}")
             self.dismiss()
 
 class DeviceListItem(BoxLayout):
-    # ... (class content is unchanged)
-    device_mac = StringProperty(''); device_alias = StringProperty(''); locations_seen = StringProperty(''); last_seen = StringProperty(''); main_app = ObjectProperty(None); display_name = StringProperty('')
+    device_mac = StringProperty('')
+    device_alias = StringProperty('')
+    locations_seen = StringProperty('')
+    last_seen = StringProperty('')
+    main_app = ObjectProperty(None)
+    display_name = StringProperty('')
+    
     def __init__(self, device_data, **kwargs):
         super().__init__(**kwargs)
         self.main_app = kwargs.get('main_app')
         self.device_mac = device_data[0]
-        try: self.device_alias = watchlist_manager.get_device_alias(self.device_mac) or ''
-        except DatabaseQueryError as e: self.device_alias = ''; logging.error(f"Could not get device alias: {e}")
+        try:
+            self.device_alias = watchlist_manager.get_device_alias(self.device_mac) or ''
+        except DatabaseQueryError as e:
+            self.device_alias = ''
+            logging.error(f"Could not get device alias: {e}")
+            
         self.locations_seen = str(device_data[1])
         self.last_seen = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(device_data[2]))
-        if self.device_alias: self.display_name = f"'{self.device_alias}'"
-        else: self.display_name = self.device_mac
+        
+        if self.device_alias:
+            self.display_name = f"'{self.device_alias}'"
+        else:
+            self.display_name = self.device_mac
+
     def show_alias_popup(self):
         popup = AliasPopup(device_mac=self.device_mac, device_type="Unknown", main_app=self.main_app)
         popup.open()
 
 class CYTApp(App):
-    # ... (theme_colors dictionary is unchanged)
-    theme_colors = {"background": (0.1, 0.1, 0.1, 1), "text_primary": (0.9, 0.9, 0.9, 1), "accent_red": (1, 0, 0, 1), "accent_green": (0, 1, 0, 1), "accent_orange": (1, 0.5, 0, 1)}
+    theme_colors = {
+        "background": (0.1, 0.1, 0.1, 1),
+        "text_primary": (0.9, 0.9, 0.9, 1),
+        "accent_red": (1, 0, 0, 1),
+        "accent_green": (0, 1, 0, 1),
+        "accent_orange": (1, 0.5, 0, 1)
+    }
 
     def build(self):
-        # ... (this method is mostly unchanged)
         self.load_settings()
-        try: watchlist_manager.initialize_database()
-        except DatabaseQueryError as e: logging.critical(f"CRITICAL: Could not initialize watchlist DB. Alerts will fail. Error: {e}")
+        try:
+            watchlist_manager.initialize_database()
+        except DatabaseQueryError as e:
+            logging.critical(f"CRITICAL: Could not initialize watchlist DB. Alerts will fail. Error: {e}")
+        
         Clock.schedule_interval(self.start_follower_query, self.INTERVAL_FOLLOWERS)
         Clock.schedule_interval(self.check_watchlist, self.INTERVAL_WATCHLIST)
         Clock.schedule_interval(self.check_for_drones, self.INTERVAL_DRONES)
     
-    # --- CHANGED: This method now loads the new alert settings ---
     def load_settings(self):
         try:
             with open('config.json', 'r') as f:
@@ -91,13 +130,13 @@ class CYTApp(App):
             
             kismet_log_path_pattern = config['paths']['kismet_logs']
             if "*" in kismet_log_path_pattern:
-                list_of_files = glob.glob(kismet_log_path_pattern)
+                list_of_files = glob.glob(os.path.expanduser(kismet_log_path_pattern))
                 if not list_of_files:
                     raise FileNotFoundError(f"No Kismet files found matching pattern: {kismet_log_path_pattern}")
                 self.DB_PATH = max(list_of_files, key=os.path.getctime)
                 logging.info(f"Using latest Kismet DB: {self.DB_PATH}")
             else:
-                self.DB_PATH = kismet_log_path_pattern
+                self.DB_PATH = os.path.expanduser(kismet_log_path_pattern)
                 logging.info(f"Using direct Kismet DB path: {self.DB_PATH}")
 
             self.TIME_WINDOW = config['timing']['time_windows']['recent'] * 60
@@ -107,25 +146,24 @@ class CYTApp(App):
             self.INTERVAL_DRONES = check_interval
             self.LOCATIONS_THRESHOLD = 3
             
-            # Load new alert settings with safe defaults
             alert_settings = config.get('alert_settings', {})
             self.DRONE_ALERT_WINDOW = alert_settings.get('drone_time_window_seconds', 300)
             self.WATCHLIST_ALERT_WINDOW = alert_settings.get('watchlist_time_window_seconds', 300)
 
         except (IOError, KeyError, FileNotFoundError) as e:
             logging.critical(f"Failed to load settings from config.json: {e}")
-            # Set safe defaults
-            self.DB_PATH = "NOT_FOUND"; self.INTERVAL_FOLLOWERS = 60; self.INTERVAL_WATCHLIST = 60;
+            self.DB_PATH = "NOT_FOUND"
+            self.INTERVAL_FOLLOWERS = 60; self.INTERVAL_WATCHLIST = 60;
             self.INTERVAL_DRONES = 60; self.TIME_WINDOW = 300; self.LOCATIONS_THRESHOLD = 3;
             self.DRONE_ALERT_WINDOW = 300; self.WATCHLIST_ALERT_WINDOW = 300
 
-    # ... (start_follower_query, run_follower_query_in_background, update_ui_with_results, and reset_alert_bar are unchanged)
     def start_follower_query(self, dt):
         self.root.ids.follower_list.clear_widgets()
         loading_label = Label(text="Querying for followers...", font_size='20sp')
         self.root.ids.follower_list.add_widget(loading_label)
         anim = Animation(opacity=0.5, duration=0.7) + Animation(opacity=1, duration=0.7); anim.repeat = True; anim.start(loading_label)
         threading.Thread(target=self.run_follower_query_in_background, daemon=True).start()
+
     def run_follower_query_in_background(self):
         try:
             followers = get_chase_targets(self.DB_PATH, self.TIME_WINDOW, self.LOCATIONS_THRESHOLD)
@@ -133,18 +171,21 @@ class CYTApp(App):
         except (DatabaseNotFound, DatabaseQueryError) as e:
             logging.error(f"Follower query failed: {e}")
             Clock.schedule_once(lambda dt, exception=e: self.update_ui_with_results(exception))
+
     def update_ui_with_results(self, results):
         follower_list = self.root.ids.follower_list; follower_list.clear_widgets()
-        if isinstance(results, Exception): follower_list.add_widget(Label(text=str(results), font_size='20sp', color=self.theme_colors['accent_red']))
-        elif not results: follower_list.add_widget(Label(text="No followers detected.", font_size='20sp'))
+        if isinstance(results, Exception):
+            follower_list.add_widget(Label(text=str(results), font_size='20sp', color=self.theme_colors['accent_red']))
+        elif not results:
+            follower_list.add_widget(Label(text="No followers detected.", font_size='20sp'))
         else:
             for device in results:
                 item = DeviceListItem(device_data=device, main_app=self)
                 follower_list.add_widget(item)
+
     def reset_alert_bar(self):
         self.root.ids.alert_bar.text = STATUS_MONITORING; self.root.ids.alert_bar.color = self.theme_colors['accent_green']
 
-    # --- CHANGED: This method now passes the configured time window ---
     def check_for_drones(self, dt):
         alert_bar = self.root.ids.alert_bar
         if ALERT_TYPE_WATCHLIST in alert_bar.text: return
@@ -160,7 +201,6 @@ class CYTApp(App):
         except DatabaseQueryError as e:
             logging.warning(f"Could not check for drones: {e}")
 
-    # --- CHANGED: This method now passes the configured time window ---
     def check_watchlist(self, dt):
         alert_bar = self.root.ids.alert_bar
         if ALERT_TYPE_DRONE in alert_bar.text: return
