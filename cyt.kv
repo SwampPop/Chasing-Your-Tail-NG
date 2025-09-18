@@ -2,21 +2,26 @@
 
 BoxLayout:
     orientation: 'vertical'
+    canvas.before:
+        Color:
+            rgba: app.theme_colors.background
+        Rectangle:
+            pos: self.pos
+            size: self.size
     
     Label:
         id: alert_bar
         text: 'STATUS: MONITORING'
         font_size: '20sp'
         size_hint_y: 0.1
-        color: 0, 1, 0, 1
+        color: app.theme_colors.accent_green
         canvas.before:
             Color:
-                rgba: 0.1, 0.1, 0.1, 1
+                rgba: app.theme_colors.background[0] * 1.8, app.theme_colors.background[1] * 1.8, app.theme_colors.background[2] * 1.8, 1
             Rectangle:
                 pos: self.pos
                 size: self.size
 
-    # NEW: Added a layout to hold the clear button
     BoxLayout:
         size_hint_y: None
         height: 40
@@ -26,6 +31,12 @@ BoxLayout:
             on_press: app.clear_follower_list()
 
     ScrollView:
+        canvas.before:
+            Color:
+                rgba: app.theme_colors.background
+            Rectangle:
+                pos: self.pos
+                size: self.size
         BoxLayout:
             id: follower_list
             orientation: 'vertical'
@@ -47,13 +58,17 @@ BoxLayout:
     device_type: ''
 
     Label:
+        color: app.theme_colors.text_primary
         text: "Device: " + root.display_name
         font_size: '16sp'
     Label:
+        color: app.theme_colors.text_primary
         text: "Type: " + root.device_type
     Label:
+        color: app.theme_colors.text_primary
         text: "Locations Seen: " + root.locations_seen
     Label:
+        color: app.theme_colors.text_primary
         text: "Last Seen: " + root.last_seen
     Button:
         text: "Name this Device"

@@ -112,11 +112,11 @@ class DeviceListItem(BoxLayout):
 
 class CYTApp(App):
     theme_colors = {
-        "background": (0.1, 0.1, 0.1, 1),
-        "text_primary": (0.9, 0.9, 0.9, 1),
-        "accent_red": (1, 0, 0, 1),
-        "accent_green": (0, 1, 0, 1),
-        "accent_orange": (1, 0.5, 0, 1)
+        "background": (0.05, 0.05, 0.1, 1),   # Dark Navy Blue
+        "text_primary": (0.7, 0.85, 1.0, 1),  # Light Cyan
+        "accent_red": (1, 0.2, 0.2, 1),       # Bright Red
+        "accent_green": (0.2, 1.0, 0.2, 1),   # Bright Green
+        "accent_amber": (1, 0.7, 0, 1)        # Bright Amber/Yellow
     }
 
     def build(self):
@@ -168,7 +168,7 @@ class CYTApp(App):
 
     def start_follower_query(self, dt):
         self.root.ids.follower_list.clear_widgets()
-        loading_label = Label(text="Querying for followers...", font_size='20sp')
+        loading_label = Label(text="Querying for followers...", font_size='20sp', color=self.theme_colors['text_primary'])
         self.root.ids.follower_list.add_widget(loading_label)
         anim = Animation(opacity=0.5, duration=0.7) + Animation(opacity=1, duration=0.7); anim.repeat = True; anim.start(loading_label)
         threading.Thread(target=self.run_follower_query_in_background, daemon=True).start()
@@ -186,21 +186,21 @@ class CYTApp(App):
         if isinstance(results, Exception):
             follower_list.add_widget(Label(text=str(results), font_size='20sp', color=self.theme_colors['accent_red']))
         elif not results:
-            follower_list.add_widget(Label(text="No followers detected.", font_size='20sp'))
+            follower_list.add_widget(Label(text="No followers detected.", font_size='20sp', color=self.theme_colors['text_primary']))
         else:
             for device in results:
                 item = DeviceListItem(device_data=device, main_app=self)
                 follower_list.add_widget(item)
 
     def reset_alert_bar(self):
-        self.root.ids.alert_bar.text = STATUS_MONITORING; self.root.ids.alert_bar.color = self.theme_colors['accent_green']
+        self.root.ids.alert_bar.text = STATUS_MONITORING
+        self.root.ids.alert_bar.color = self.theme_colors['accent_green']
 
     def clear_follower_list(self):
-        """Clears the follower list and displays a confirmation message."""
         follower_list = self.root.ids.follower_list
         follower_list.clear_widgets()
         follower_list.add_widget(
-            Label(text="Follower list cleared.", font_size='20sp')
+            Label(text="Follower list cleared.", font_size='20sp', color=self.theme_colors['text_primary'])
         )
         logging.info("Follower list cleared by user.")
 
@@ -213,7 +213,7 @@ class CYTApp(App):
                 drone_mac, drone_name = drones[0]
                 display_name = drone_name if drone_name else drone_mac
                 alert_bar.text = f"!!! {ALERT_TYPE_DRONE} DETECTED: {display_name} !!!"
-                alert_bar.color = self.theme_colors['accent_orange']
+                alert_bar.color = self.theme_colors['accent_amber']
             elif ALERT_TYPE_DRONE in alert_bar.text:
                 self.reset_alert_bar()
         except DatabaseQueryError as e:
