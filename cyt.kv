@@ -1,6 +1,5 @@
 #:kivy 1.11.1
 
-# This is the root widget for our application.
 BoxLayout:
     orientation: 'vertical'
     
@@ -24,30 +23,28 @@ BoxLayout:
             size_hint_y: None
             height: self.minimum_height
 
-# Rule for how each item in the follower list should look
 <DeviceListItem>:
     orientation: 'vertical'
     padding: [10, 10, 10, 10]
     spacing: 5
     size_hint_y: None
-    height: 150
-    
+    height: 170
+
     device_mac: ''
     device_alias: ''
     locations_seen: ''
     last_seen: ''
-    # This new property will be set in the Python file
     display_name: ''
+    device_type: ''
 
     Label:
-        # CHANGED: Replaced complex f-string with a simple property
         text: "Device: " + root.display_name
         font_size: '16sp'
     Label:
-        # CHANGED: Replaced f-string with concatenation
+        text: "Type: " + root.device_type
+    Label:
         text: "Locations Seen: " + root.locations_seen
     Label:
-        # CHANGED: Replaced f-string with concatenation
         text: "Last Seen: " + root.last_seen
     Button:
         text: "Name this Device"
@@ -55,7 +52,6 @@ BoxLayout:
         height: 40
         on_press: root.show_alias_popup()
 
-# Rule for the Alias Popup window
 <AliasPopup>:
     size_hint: 0.8, 0.6
     auto_dismiss: False
@@ -66,7 +62,6 @@ BoxLayout:
         spacing: 10
         
         Label:
-            # CHANGED: Replaced f-string with concatenation
             text: "Add to Watchlist\\nMAC: " + root.device_mac
             font_size: '18sp'
         

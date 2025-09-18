@@ -32,7 +32,7 @@ STATUS_MONITORING = "STATUS: MONITORING"
 
 # --- CORE LOGIC FUNCTION ---
 def get_chase_targets(db_path, time_window, locations_threshold):
-    """Queries the Kismet DB for devices meeting follower criteria using the modern schema."""
+    """Queries the Kismet DB for devices meeting follower criteria, including device type."""
     if not os.path.exists(db_path) or db_path == "NOT_FOUND":
         raise DatabaseNotFound(f"Error: The database file could not be found at '{db_path}'")
     try:
@@ -41,12 +41,17 @@ def get_chase_targets(db_path, time_window, locations_threshold):
             end_time = int(time.time())
             start_time = end_time - time_window
             
-            # This new query uses the 'packets' table and looks at the datasource as the "location".
+            # This new query JOINS the packets and devices tables.
             query = """
-            SELECT sourcemac as devmac, COUNT(DISTINCT datasource) as locations, MAX(ts_sec) as last_seen
-            FROM packets
-            WHERE sourcemac IS NOT NULL AND sourcemac != '00:00:00:00:00:00' AND ts_sec > ?
-            GROUP BY sourcemac
+            SELECT
+                p.sourcemac as devmac,
+                COUNT(DISTINCT p.datasource) as locations,
+                MAX(p.ts_sec) as last_seen,
+                d.type as device_type
+            FROM packets p
+            JOIN devices d ON p.sourcemac = d.devmac
+            WHERE p.sourcemac IS NOT NULL AND p.sourcemac != '00:00:00:00:00:00' AND p.ts_sec > ?
+            GROUP BY p.sourcemac
             HAVING locations >= ?
             ORDER BY last_seen DESC
             """
@@ -80,10 +85,12 @@ class DeviceListItem(BoxLayout):
     last_seen = StringProperty('')
     main_app = ObjectProperty(None)
     display_name = StringProperty('')
+    device_type = StringProperty('')
     
     def __init__(self, device_data, **kwargs):
         super().__init__(**kwargs)
         self.main_app = kwargs.get('main_app')
+        
         self.device_mac = device_data[0]
         try:
             self.device_alias = watchlist_manager.get_device_alias(self.device_mac) or ''
@@ -93,6 +100,7 @@ class DeviceListItem(BoxLayout):
             
         self.locations_seen = str(device_data[1])
         self.last_seen = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(device_data[2]))
+        self.device_type = device_data[3] if device_data[3] else "Unknown"
         
         if self.device_alias:
             self.display_name = f"'{self.device_alias}'"
@@ -100,7 +108,7 @@ class DeviceListItem(BoxLayout):
             self.display_name = self.device_mac
 
     def show_alias_popup(self):
-        popup = AliasPopup(device_mac=self.device_mac, device_type="Unknown", main_app=self.main_app)
+        popup = AliasPopup(device_mac=self.device_mac, device_type=self.device_type, main_app=self.main_app)
         popup.open()
 
 class CYTApp(App):
@@ -129,14 +137,17 @@ class CYTApp(App):
                 config = json.load(f)
             
             kismet_log_path_pattern = config['paths']['kismet_logs']
-            if "*" in kismet_log_path_pattern:
-                list_of_files = glob.glob(os.path.expanduser(kismet_log_path_pattern))
+            # Expand the tilde (~) to the user's home directory
+            expanded_path = os.path.expanduser(kismet_log_path_pattern)
+            
+            if "*" in expanded_path:
+                list_of_files = glob.glob(expanded_path)
                 if not list_of_files:
                     raise FileNotFoundError(f"No Kismet files found matching pattern: {kismet_log_path_pattern}")
                 self.DB_PATH = max(list_of_files, key=os.path.getctime)
                 logging.info(f"Using latest Kismet DB: {self.DB_PATH}")
             else:
-                self.DB_PATH = os.path.expanduser(kismet_log_path_pattern)
+                self.DB_PATH = expanded_path
                 logging.info(f"Using direct Kismet DB path: {self.DB_PATH}")
 
             self.TIME_WINDOW = config['timing']['time_windows']['recent'] * 60
