@@ -16,6 +16,15 @@ BoxLayout:
                 pos: self.pos
                 size: self.size
 
+    # NEW: Added a layout to hold the clear button
+    BoxLayout:
+        size_hint_y: None
+        height: 40
+        padding: [5, 5, 5, 5]
+        Button:
+            text: "Clear Follower List"
+            on_press: app.clear_follower_list()
+
     ScrollView:
         BoxLayout:
             id: follower_list
@@ -52,24 +61,23 @@ BoxLayout:
         height: 40
         on_press: root.show_alias_popup()
 
-# --- CHANGED: This entire rule has been redesigned ---
 <AliasPopup>:
-    size_hint: 0.8, 0.7 # Made slightly taller
+    size_hint: 0.8, 0.7
     auto_dismiss: False
 
     BoxLayout:
         orientation: 'vertical'
-        padding: 20 # Increased padding
-        spacing: 15 # Increased spacing
+        padding: 20
+        spacing: 15
         
         Label:
-            text: "🏷️  Name a Device" # Added title with icon
+            text: "Name a Device"
             font_size: '24sp'
             size_hint_y: None
             height: 40
             bold: True
             
-        BoxLayout: # New layout for the MAC address
+        BoxLayout:
             size_hint_y: None
             height: 30
             Label:
@@ -78,7 +86,7 @@ BoxLayout:
                 halign: 'left'
             Label:
                 text: root.device_mac
-                font_name: 'DroidSansMono' # Monospace font for technical look
+                font_name: 'DroidSansMono'
                 bold: True
                 size_hint_x: 0.6
         

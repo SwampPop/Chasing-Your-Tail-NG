@@ -41,7 +41,6 @@ def get_chase_targets(db_path, time_window, locations_threshold):
             end_time = int(time.time())
             start_time = end_time - time_window
             
-            # This new query JOINS the packets and devices tables.
             query = """
             SELECT
                 p.sourcemac as devmac,
@@ -137,7 +136,6 @@ class CYTApp(App):
                 config = json.load(f)
             
             kismet_log_path_pattern = config['paths']['kismet_logs']
-            # Expand the tilde (~) to the user's home directory
             expanded_path = os.path.expanduser(kismet_log_path_pattern)
             
             if "*" in expanded_path:
@@ -196,6 +194,15 @@ class CYTApp(App):
 
     def reset_alert_bar(self):
         self.root.ids.alert_bar.text = STATUS_MONITORING; self.root.ids.alert_bar.color = self.theme_colors['accent_green']
+
+    def clear_follower_list(self):
+        """Clears the follower list and displays a confirmation message."""
+        follower_list = self.root.ids.follower_list
+        follower_list.clear_widgets()
+        follower_list.add_widget(
+            Label(text="Follower list cleared.", font_size='20sp')
+        )
+        logging.info("Follower list cleared by user.")
 
     def check_for_drones(self, dt):
         alert_bar = self.root.ids.alert_bar
