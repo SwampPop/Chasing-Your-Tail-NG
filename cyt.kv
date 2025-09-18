@@ -52,23 +52,42 @@ BoxLayout:
         height: 40
         on_press: root.show_alias_popup()
 
+# --- CHANGED: This entire rule has been redesigned ---
 <AliasPopup>:
-    size_hint: 0.8, 0.6
+    size_hint: 0.8, 0.7 # Made slightly taller
     auto_dismiss: False
 
     BoxLayout:
         orientation: 'vertical'
-        padding: 10
-        spacing: 10
+        padding: 20 # Increased padding
+        spacing: 15 # Increased spacing
         
         Label:
-            text: "Add to Watchlist\\nMAC: " + root.device_mac
-            font_size: '18sp'
+            text: "🏷️  Name a Device" # Added title with icon
+            font_size: '24sp'
+            size_hint_y: None
+            height: 40
+            bold: True
+            
+        BoxLayout: # New layout for the MAC address
+            size_hint_y: None
+            height: 30
+            Label:
+                text: "MAC Address:"
+                size_hint_x: 0.4
+                halign: 'left'
+            Label:
+                text: root.device_mac
+                font_name: 'DroidSansMono' # Monospace font for technical look
+                bold: True
+                size_hint_x: 0.6
         
         TextInput:
             id: alias_input
             hint_text: 'Enter Alias (e.g., "Gray Honda Civic")'
             multiline: False
+            size_hint_y: None
+            height: 40
 
         TextInput:
             id: notes_input
