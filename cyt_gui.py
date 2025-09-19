@@ -13,6 +13,7 @@ import json
 import threading
 import logging
 import glob
+from collections import deque
 
 # --- Logging Configuration ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,6 +24,7 @@ class DatabaseNotFound(Exception):
 
 # --- Import from custom modules ---
 from lib import watchlist_manager
+from lib import history_manager
 from lib.watchlist_manager import DatabaseQueryError
 
 # --- Constants ---
@@ -110,14 +112,23 @@ class CYTApp(App):
     }
 
     def build(self):
+        self.appearance_archive_queue = deque()
         self.load_settings()
+        
+        try:
+            history_manager.initialize_history_database()
+        except Exception as e:
+            logging.critical(f"CRITICAL: Could not initialize HISTORY DB. Archiving will fail. Error: {e}")
+        
         try:
             watchlist_manager.initialize_database()
         except DatabaseQueryError as e:
             logging.critical(f"CRITICAL: Could not initialize watchlist DB. Alerts will fail. Error: {e}")
+            
         Clock.schedule_interval(self.start_follower_query, self.INTERVAL_FOLLOWERS)
         Clock.schedule_interval(self.check_watchlist, self.INTERVAL_WATCHLIST)
         Clock.schedule_interval(self.check_for_drones, self.INTERVAL_DRONES)
+        Clock.schedule_interval(self.archive_data_task, 300) # Archive every 5 minutes
     
     def load_settings(self):
         try:
@@ -167,6 +178,7 @@ class CYTApp(App):
 
     def update_ui_with_results(self, results):
         follower_list = self.root.ids.follower_list
+        
         if isinstance(results, list) and results:
             try:
                 watchlist_macs = watchlist_manager.get_watchlist_macs()
@@ -179,6 +191,10 @@ class CYTApp(App):
                         self.trigger_confirmed_threat_alert(threat_mac, alias)
             except DatabaseQueryError as e:
                 logging.warning(f"Could not cross-reference watchlist for confirmed threats: {e}")
+
+            for device_row in results:
+                appearance = {"mac": device_row[0], "timestamp": device_row[2], "location_id": "follower_detection"}
+                self.appearance_archive_queue.append(appearance)
         
         follower_list.clear_widgets()
         if isinstance(results, Exception):
@@ -189,6 +205,17 @@ class CYTApp(App):
             for device in results:
                 item = DeviceListItem(device_data=device, main_app=self)
                 follower_list.add_widget(item)
+
+    def archive_data_task(self, dt):
+        """Takes pending appearances from the queue and archives them."""
+        if not self.appearance_archive_queue:
+            return
+        
+        items_to_archive = list(self.appearance_archive_queue)
+        self.appearance_archive_queue.clear()
+        
+        logging.info(f"Archiving {len(items_to_archive)} device appearances...")
+        threading.Thread(target=history_manager.archive_appearances, args=(items_to_archive,), daemon=True).start()
 
     def trigger_confirmed_threat_alert(self, mac, alias):
         alert_bar = self.root.ids.alert_bar
