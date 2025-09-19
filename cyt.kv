@@ -4,7 +4,8 @@ BoxLayout:
     orientation: 'vertical'
     canvas.before:
         Color:
-            rgba: app.theme_colors.background
+            # CHANGED: Use bracket notation for dictionary access
+            rgba: app.theme_colors['background']
         Rectangle:
             pos: self.pos
             size: self.size
@@ -14,10 +15,11 @@ BoxLayout:
         text: 'STATUS: MONITORING'
         font_size: '20sp'
         size_hint_y: 0.1
-        color: app.theme_colors.accent_green
+        color: app.theme_colors['accent_green'] # CHANGED
         canvas.before:
             Color:
-                rgba: app.theme_colors.background[0] * 1.8, app.theme_colors.background[1] * 1.8, app.theme_colors.background[2] * 1.8, 1
+                # This line is for creating a slightly lighter shade of the background
+                rgba: app.theme_colors['background'][0] * 1.8, app.theme_colors['background'][1] * 1.8, app.theme_colors['background'][2] * 1.8, 1
             Rectangle:
                 pos: self.pos
                 size: self.size
@@ -33,7 +35,7 @@ BoxLayout:
     ScrollView:
         canvas.before:
             Color:
-                rgba: app.theme_colors.background
+                rgba: app.theme_colors['background'] # CHANGED
             Rectangle:
                 pos: self.pos
                 size: self.size
@@ -49,26 +51,21 @@ BoxLayout:
     spacing: 5
     size_hint_y: None
     height: 170
-
-    device_mac: ''
-    device_alias: ''
-    locations_seen: ''
-    last_seen: ''
-    display_name: ''
-    device_type: ''
+    device_mac: ''; device_alias: ''; locations_seen: ''
+    last_seen: ''; display_name: ''; device_type: ''
 
     Label:
-        color: app.theme_colors.text_primary
+        color: app.theme_colors['text_primary'] # CHANGED
         text: "Device: " + root.display_name
         font_size: '16sp'
     Label:
-        color: app.theme_colors.text_primary
+        color: app.theme_colors['text_primary'] # CHANGED
         text: "Type: " + root.device_type
     Label:
-        color: app.theme_colors.text_primary
+        color: app.theme_colors['text_primary'] # CHANGED
         text: "Locations Seen: " + root.locations_seen
     Label:
-        color: app.theme_colors.text_primary
+        color: app.theme_colors['text_primary'] # CHANGED
         text: "Last Seen: " + root.last_seen
     Button:
         text: "Name this Device"
@@ -79,19 +76,16 @@ BoxLayout:
 <AliasPopup>:
     size_hint: 0.8, 0.7
     auto_dismiss: False
-
     BoxLayout:
         orientation: 'vertical'
         padding: 20
         spacing: 15
-        
         Label:
             text: "Name a Device"
             font_size: '24sp'
             size_hint_y: None
             height: 40
             bold: True
-            
         BoxLayout:
             size_hint_y: None
             height: 30
@@ -104,18 +98,15 @@ BoxLayout:
                 font_name: 'DroidSansMono'
                 bold: True
                 size_hint_x: 0.6
-        
         TextInput:
             id: alias_input
             hint_text: 'Enter Alias (e.g., "Gray Honda Civic")'
             multiline: False
             size_hint_y: None
             height: 40
-
         TextInput:
             id: notes_input
             hint_text: 'Enter notes (optional)'
-
         BoxLayout:
             size_hint_y: None
             height: 50
