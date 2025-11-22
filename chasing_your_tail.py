@@ -1,4 +1,4 @@
-### Chasing Your Tail V04_15_22
+### Chasing Your Tail V04_15_22.py 
 ### @matt0177
 ### Released under the MIT License https://opensource.org/licenses/MIT
 ###
@@ -30,19 +30,26 @@ class CYTMonitorApp:
         self.probe_ignore_list = set()
         self.latest_kismet_db = None
         self.secure_monitor = None
+        self.log_file_handle = None # Added to hold the file handle
         self._setup_logging()
 
     def _setup_logging(self):
-        """CHANGED: Configures the unified logging system."""
+        """Configures the unified logging system."""
         log_dir = pathlib.Path('./logs')
         log_dir.mkdir(parents=True, exist_ok=True)
-        log_file_name = log_dir / f'cyt_log_{time.strftime("%m%d%y_%H%M%S")}.log'
+        
+        # Create the file handle needed by SecureCYTMonitor
+        filename = f'cyt_log_{time.strftime("%m%d%y_%H%M%S")}.log'
+        self.log_file_path = log_dir / filename
+        
+        # Open file in append mode (buffering=1 means line buffered)
+        self.log_file_handle = open(self.log_file_path, "w", buffering=1)
         
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler(log_file_name),
+                logging.FileHandler(self.log_file_path),
                 logging.StreamHandler(sys.stdout)
             ]
         )
@@ -51,7 +58,8 @@ class CYTMonitorApp:
     def _shutdown(self, signum=None, frame=None):
         """Handles graceful shutdown of the application."""
         logging.info("Shutting down gracefully...")
-        # Any other cleanup can go here
+        if self.log_file_handle:
+            self.log_file_handle.close()
         sys.exit(0)
 
     def initialize(self):
@@ -66,15 +74,32 @@ class CYTMonitorApp:
             
             db_path_pattern = self.config['paths']['kismet_logs']
             logging.info(f"Searching for Kismet databases with pattern: {db_path_pattern}")
+            
+            # Check if it's a directory or a file pattern
+            if os.path.isdir(db_path_pattern):
+                 db_path_pattern = os.path.join(db_path_pattern, "*.kismet")
+
             list_of_files = glob.glob(db_path_pattern)
             if not list_of_files:
-                raise FileNotFoundError(f"No Kismet database files found at: {db_path_pattern}")
+                # Fallback for testing: use the test database if it exists
+                if os.path.exists("test_capture.kismet"):
+                    logging.warning("No live Kismet DB found. Using test_capture.kismet for simulation.")
+                    self.latest_kismet_db = "test_capture.kismet"
+                else:
+                    raise FileNotFoundError(f"No Kismet database files found at: {db_path_pattern}")
+            else:
+                self.latest_kismet_db = max(list_of_files, key=os.path.getctime)
             
-            self.latest_kismet_db = max(list_of_files, key=os.path.getctime)
             logging.info(f"Using Kismet database: {self.latest_kismet_db}")
             
             # Initialize the core logic monitor
-            self.secure_monitor = SecureCYTMonitor(self.config, self.ignore_list, self.probe_ignore_list)
+            # CHANGED: Passing self.log_file_handle to satisfy the required argument
+            self.secure_monitor = SecureCYTMonitor(
+                self.config, 
+                self.ignore_list, 
+                self.probe_ignore_list, 
+                self.log_file_handle
+            )
             
             # Test database connection and initialize tracking lists
             logging.info("Validating database and initializing tracking lists...")
@@ -91,7 +116,6 @@ class CYTMonitorApp:
 
     def run(self):
         """Runs the main monitoring loop."""
-        # Setup signal handler for graceful shutdown on Control+C
         signal.signal(signal.SIGINT, self._shutdown)
 
         time_count = 0
