@@ -1,0 +1,29 @@
+{
+  "paths": {
+    "log_dir": "logs",
+    "kismet_logs": ".",
+    "ignore_lists": {
+      "mac": "mac_ignore.json",
+      "ssid": "ssid_ignore.json"
+    }
+  },
+  "api_keys": {
+    "wigle": ""
+  },
+  "search": {
+    "lat_min": null,
+    "lat_max": null,
+    "lon_min": null,
+    "lon_max": null
+  },
+  "timing": {
+    "check_interval": 60,
+    "list_update_interval": 5,
+    "time_windows": {
+        "recent": 5,
+        "medium": 10,
+        "old": 15,
+        "oldest": 20
+    }
+  }
+}
