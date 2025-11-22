@@ -17,3 +17,6 @@ dummy_kismet.db
 watchlist.db
 # Test artifacts
 tests/__pycache__/
+secure_credentials/
+logs/
+test_capture.kismet
