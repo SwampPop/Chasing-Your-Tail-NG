@@ -17,3 +17,5 @@ dummy_kismet.db
 watchlist.db
 # Test artifacts
 tests/__pycache__/
+*.kismet
+config.json
