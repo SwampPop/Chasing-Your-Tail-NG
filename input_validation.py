@@ -283,8 +283,14 @@ class SecureInputHandler:
                 f"Configuration loaded and validated: {config_path}")
             return config
 
-        except Exception as e:
-            logger.error(f"Error loading config: {e}")
+        except FileNotFoundError as e:
+            logger.error(f"Config file not found: {config_path}")
+            return None
+        except (IOError, OSError) as e:
+            logger.error(f"Error reading config file: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in config file: {e}")
             return None
 
     def safe_load_ignore_list(self, file_path: Path, list_type: str) -> List[str]:
@@ -312,6 +318,12 @@ class SecureInputHandler:
 
             return []
 
-        except Exception as e:
-            logger.error(f"Error loading ignore list {file_path}: {e}")
+        except FileNotFoundError as e:
+            logger.info(f"Ignore list not found: {file_path}")
+            return []
+        except (IOError, OSError) as e:
+            logger.error(f"Error reading ignore list file {file_path}: {e}")
+            return []
+        except (UnicodeDecodeError, ValueError) as e:
+            logger.error(f"Error parsing ignore list {file_path}: {e}")
             return []

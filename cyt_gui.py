@@ -1,8 +1,10 @@
 from lib.gui_logic import DatabaseNotFound
 from lib.watchlist_manager import DatabaseQueryError
+from lib.database_utils import DatabaseInitError
 from lib import gui_logic
 from lib import history_manager
 from lib import watchlist_manager
+from cyt_constants import AlertType
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
@@ -16,20 +18,12 @@ import json
 import threading
 import logging
 import glob
+import sqlite3
 from collections import deque
 
 # --- Logging Configuration ---
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-# --- Import from custom modules ---
-
-# --- Constants ---
-ALERT_TYPE_DRONE = "DRONE"
-ALERT_TYPE_WATCHLIST = "ALERT"
-STATUS_MONITORING = "STATUS: MONITORING"
-ALERT_TYPE_CONFIRMED = "CONFIRMED THREAT"
 
 # --- KIVY UI CLASSES ---
 
@@ -98,13 +92,17 @@ class CYTApp(App):
 
     def build(self):
         self.appearance_archive_queue = deque()
+        self.appearance_archive_lock = threading.Lock()
         self.load_settings()
 
         try:
             history_manager.initialize_history_database()
-        except Exception as e:
+        except DatabaseInitError as e:
             logging.critical(
                 f"CRITICAL: Could not initialize HISTORY DB. Archiving will fail. Error: {e}")
+        except sqlite3.Error as e:
+            logging.critical(
+                f"CRITICAL: Database error initializing HISTORY DB. Error: {e}")
 
         try:
             watchlist_manager.initialize_database()
@@ -116,8 +114,8 @@ class CYTApp(App):
             self.start_follower_query, self.INTERVAL_FOLLOWERS)
         Clock.schedule_interval(self.check_watchlist, self.INTERVAL_WATCHLIST)
         Clock.schedule_interval(self.check_for_drones, self.INTERVAL_DRONES)
-        # Archive every 5 minutes
-        Clock.schedule_interval(self.archive_data_task, 300)
+        # Archive based on config
+        Clock.schedule_interval(self.archive_data_task, self.ARCHIVE_INTERVAL)
 
     def load_settings(self):
         try:
@@ -141,12 +139,17 @@ class CYTApp(App):
             self.INTERVAL_FOLLOWERS = check_interval
             self.INTERVAL_WATCHLIST = check_interval
             self.INTERVAL_DRONES = check_interval
-            self.LOCATIONS_THRESHOLD = 3
+
+            # Load alert settings
             alert_settings = config.get('alert_settings', {})
-            self.DRONE_ALERT_WINDOW = alert_settings.get(
-                'drone_time_window_seconds', 300)
-            self.WATCHLIST_ALERT_WINDOW = alert_settings.get(
-                'watchlist_time_window_seconds', 300)
+            self.LOCATIONS_THRESHOLD = alert_settings.get('locations_threshold', 3)
+            self.DRONE_ALERT_WINDOW = alert_settings.get('drone_time_window_seconds', 300)
+            self.WATCHLIST_ALERT_WINDOW = alert_settings.get('watchlist_time_window_seconds', 300)
+
+            # Load UI settings
+            ui_settings = config.get('ui_settings', {})
+            self.ANIMATION_DURATION = ui_settings.get('animation_duration', 0.7)
+            self.ARCHIVE_INTERVAL = ui_settings.get('archive_interval_seconds', 300)
         except (IOError, KeyError, FileNotFoundError) as e:
             logging.critical(
                 f"Failed to load settings from config.json: {e}")
@@ -158,14 +161,16 @@ class CYTApp(App):
             self.LOCATIONS_THRESHOLD = 3
             self.DRONE_ALERT_WINDOW = 300
             self.WATCHLIST_ALERT_WINDOW = 300
+            self.ANIMATION_DURATION = 0.7
+            self.ARCHIVE_INTERVAL = 300
 
     def start_follower_query(self, dt):
         self.root.ids.follower_list.clear_widgets()
         loading_label = Label(text="Querying for followers...",
                               font_size='20sp', color=self.theme_colors['text_primary'])
         self.root.ids.follower_list.add_widget(loading_label)
-        anim = Animation(opacity=0.5, duration=0.7) + \
-            Animation(opacity=1, duration=0.7)
+        anim = Animation(opacity=0.5, duration=self.ANIMATION_DURATION) + \
+            Animation(opacity=1, duration=self.ANIMATION_DURATION)
         anim.repeat = True
         anim.start(loading_label)
         threading.Thread(
@@ -202,7 +207,8 @@ class CYTApp(App):
                 appearance = {
                     "mac": device_row[0], "timestamp": device_row[2],
                     "location_id": "follower_detection"}
-                self.appearance_archive_queue.append(appearance)
+                with self.appearance_archive_lock:
+                    self.appearance_archive_queue.append(appearance)
 
         follower_list.clear_widgets()
         if isinstance(results, Exception):
@@ -220,11 +226,12 @@ class CYTApp(App):
 
     def archive_data_task(self, dt):
         """Takes pending appearances from the queue and archives them."""
-        if not self.appearance_archive_queue:
-            return
+        with self.appearance_archive_lock:
+            if not self.appearance_archive_queue:
+                return
 
-        items_to_archive = list(self.appearance_archive_queue)
-        self.appearance_archive_queue.clear()
+            items_to_archive = list(self.appearance_archive_queue)
+            self.appearance_archive_queue.clear()
 
         logging.info(
             f"Archiving {len(items_to_archive)} device appearances...")
@@ -234,18 +241,18 @@ class CYTApp(App):
     def trigger_confirmed_threat_alert(self, mac, alias):
         alert_bar = self.root.ids.alert_bar
         display_name = f"'{alias}'" if alias else mac
-        alert_bar.text = (f"!!! {ALERT_TYPE_CONFIRMED}: "
+        alert_bar.text = (f"!!! {AlertType.CONFIRMED_THREAT.value}: "
                           f"{display_name} IS FOLLOWING !!!")
         Animation.cancel_all(alert_bar)
-        anim = Animation(color=(0.1, 0.1, 0.1, 1), duration=0.5) + \
-            Animation(color=self.theme_colors['accent_purple'], duration=0.5)
+        anim = Animation(color=(0.1, 0.1, 0.1, 1), duration=self.ANIMATION_DURATION) + \
+            Animation(color=self.theme_colors['accent_purple'], duration=self.ANIMATION_DURATION)
         anim.repeat = True
         anim.start(alert_bar)
 
     def reset_alert_bar(self):
         alert_bar = self.root.ids.alert_bar
         Animation.cancel_all(alert_bar)
-        alert_bar.text = STATUS_MONITORING
+        alert_bar.text = AlertType.STATUS_MONITORING.value
         alert_bar.color = self.theme_colors['accent_green']
 
     def clear_follower_list(self):
@@ -258,9 +265,9 @@ class CYTApp(App):
 
     def check_for_drones(self, dt):
         alert_bar = self.root.ids.alert_bar
-        if ALERT_TYPE_CONFIRMED in alert_bar.text:
+        if AlertType.CONFIRMED_THREAT.value in alert_bar.text:
             return
-        if ALERT_TYPE_WATCHLIST in alert_bar.text:
+        if AlertType.WATCHLIST.value in alert_bar.text:
             return
 
         drones = gui_logic.run_drone_check(
@@ -268,23 +275,23 @@ class CYTApp(App):
         if drones:
             drone_mac, drone_name = drones[0]
             display_name = drone_name if drone_name else drone_mac
-            alert_bar.text = (f"!!! {ALERT_TYPE_DRONE} DETECTED: "
+            alert_bar.text = (f"!!! {AlertType.DRONE.value} DETECTED: "
                               f"{display_name} !!!")
             alert_bar.color = self.theme_colors['accent_amber']
-        elif ALERT_TYPE_DRONE in alert_bar.text:
+        elif AlertType.DRONE.value in alert_bar.text:
             self.reset_alert_bar()
 
     def check_watchlist(self, dt):
         alert_bar = self.root.ids.alert_bar
-        if ALERT_TYPE_CONFIRMED in alert_bar.text:
+        if AlertType.CONFIRMED_THREAT.value in alert_bar.text:
             return
-        if ALERT_TYPE_DRONE in alert_bar.text:
+        if AlertType.DRONE.value in alert_bar.text:
             return
 
         try:
             watchlist = watchlist_manager.get_watchlist_macs()
             if not watchlist:
-                if ALERT_TYPE_WATCHLIST in alert_bar.text:
+                if AlertType.WATCHLIST.value in alert_bar.text:
                     self.reset_alert_bar()
                 return
 
@@ -292,10 +299,10 @@ class CYTApp(App):
                 self.DB_PATH, watchlist, self.WATCHLIST_ALERT_WINDOW)
             if seen_macs:
                 alias = watchlist_manager.get_device_alias(seen_macs[0])
-                alert_bar.text = (f"!!! {ALERT_TYPE_WATCHLIST}: "
+                alert_bar.text = (f"!!! {AlertType.WATCHLIST.value}: "
                                   f"'{alias}' DETECTED NEARBY !!!")
                 alert_bar.color = self.theme_colors['accent_red']
-            elif ALERT_TYPE_WATCHLIST in alert_bar.text:
+            elif AlertType.WATCHLIST.value in alert_bar.text:
                 self.reset_alert_bar()
         except DatabaseQueryError as e:
             logging.warning(f"Could not check watchlist: {e}")

@@ -6,6 +6,8 @@ import json
 import logging
 from datetime import datetime, timedelta
 import time
+from typing import List, Dict, Optional, Any, Set
+from cyt_constants import SystemConstants
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,7 @@ class SecureKismetDB:
             # CHANGED: Enforce read-only connection for safety
             uri_path = f"file:{self.db_path}?mode=ro"
             self._connection = sqlite3.connect(
-                uri_path, uri=True, timeout=30.0)
+                uri_path, uri=True, timeout=SystemConstants.DB_CONNECTION_TIMEOUT)
             self._connection.row_factory = sqlite3.Row  # Enable column access by name
             logger.info(f"Connected to database: {self.db_path}")
         except sqlite3.Error as e:
@@ -58,7 +60,7 @@ class SecureKismetDB:
             raise
 
     # NEW: Helper method to consolidate JSON parsing logic
-    def _parse_device_row(self, row: sqlite3.Row) -> dict[str, Any]]:
+    def _parse_device_row(self, row: sqlite3.Row) -> dict[str, Any]:
         """Safely parses the JSON from a device row."""
         try:
             device_data = None
@@ -78,7 +80,7 @@ class SecureKismetDB:
 
     def get_devices_by_time_range(
             self, start_time: float,
-            end_time: float | None:
+            end_time: float | None = None) -> list[dict[str, Any]]:
         """
         Get devices within time range with proper parameterization
         """
@@ -199,7 +201,7 @@ class SecureKismetDB:
 
     def check_for_drones_secure(self, time_window_seconds: int) -> List[sqlite3.Row]:
         """Securely check for drones (UAVs) seen recently."""
-        query = "SELECT devmac, devmac FROM devices WHERE type = 'UAV' AND last_time > ?"
+        query = "SELECT devmac, type FROM devices WHERE type = 'UAV' AND last_time > ?"
         time_threshold = int(time.time()) - time_window_seconds
         params = (time_threshold,)
         return self.execute_safe_query(query, params)

@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 import math
+from cyt_constants import SystemConstants
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,8 @@ class GPSTracker:
 
     def _calculate_distance(self, loc1: GPSLocation,
                               loc2: GPSLocation) -> float:
-        R = 6371000
+        """Calculate distance between two GPS coordinates using Haversine formula"""
+        R = SystemConstants.EARTH_RADIUS_METERS  # Earth's radius in meters
         lat1_rad, lat2_rad = math.radians(
             loc1.latitude), math.radians(loc2.latitude)
         delta_lat = math.radians(loc2.latitude - loc1.latitude)
@@ -136,23 +138,45 @@ class GPSTracker:
 class KMLExporter:
     """Export GPS and device data to KML format for Google Earth"""
 
-    def __init__(self):
+    def __init__(self, template_path: str = 'template.kml'):
+        self.template_path = template_path
+        self.using_fallback = False
+
         try:
-            with open('template.kml', 'r') as f:
+            with open(template_path, 'r') as f:
                 self.kml_template = f.read()
+            logger.info(f"KML template loaded from: {template_path}")
+
         except FileNotFoundError:
-            logger.error(
-                "CRITICAL: template.kml not found. KML export will fail.")
+            logger.warning(
+                f"KML template not found at: {template_path}. "
+                f"Using minimal fallback template. KML output will be basic.")
+            self.using_fallback = True
             # Provide a minimal fallback template
             self.kml_template = (
-                '<?xml version="1.0" encoding="UTF-8"?><kml '
-                'xmlns="http://www.opengis.net/kml/2.2"><Document>'
-                '<name>CYT Report</name>{content}</Document></kml>')
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<kml xmlns="http://www.opengis.net/kml/2.2">'
+                '<Document>'
+                '<name>CYT Surveillance Report</name>'
+                '<description>Generated at {timestamp}</description>'
+                '{content}'
+                '</Document>'
+                '</kml>')
+
+        except (IOError, OSError) as e:
+            logger.error(f"Failed to read KML template: {e}")
+            raise RuntimeError(
+                f"Cannot initialize KML exporter: template read error - {e}") from e
 
     def generate_kml(self, gps_tracker: GPSTracker,
                      surveillance_devices: List = None,
                      output_file: str = "cyt_analysis.kml") -> str:
         """Generate spectacular KML file with advanced surveillance visualization"""
+
+        if self.using_fallback:
+            logger.warning(
+                "Using fallback KML template. For professional-grade KML output, "
+                "ensure template.kml exists in the project directory.")
 
         if not gps_tracker.location_sessions:
             logger.warning("No GPS data available for KML generation")
@@ -195,8 +219,26 @@ class KMLExporter:
         return kml_output
 
     def _generate_empty_kml(self, output_file: str) -> str:
-        # This logic should be present in your full file
-        pass
+        """Generate a minimal KML file when no data is available"""
+        empty_kml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<kml xmlns="http://www.opengis.net/kml/2.2">'
+            '<Document>'
+            '<name>CYT Surveillance Report - No Data</name>'
+            f'<description>Generated at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</description>'
+            '<Placemark><name>No GPS Data Available</name></Placemark>'
+            '</Document>'
+            '</kml>')
+
+        try:
+            with open(output_file, 'w') as f:
+                f.write(empty_kml)
+            logger.info(f"Empty KML file generated: {output_file}")
+        except (IOError, OSError) as e:
+            logger.error(f"Failed to write KML file: {e}")
+            raise
+
+        return empty_kml
 
 
 def simulate_gps_data() -> List[Tuple[float, float, str]]:
