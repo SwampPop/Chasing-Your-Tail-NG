@@ -6,7 +6,8 @@ from secure_credentials import SecureCredentialManager
 # The path to the local database file you want to back up.
 LOCAL_DB_PATH = "cyt_history.db"
 # The path where the file will be saved in your Dropbox App folder.
-DROPBOX_DEST_PATH = f"/{LOCAL_DB_PATH}" 
+DROPBOX_DEST_PATH = f"/{LOCAL_DB_PATH}"
+
 
 def main():
     """
@@ -21,16 +22,22 @@ def main():
     token = manager.get_credential("dropbox", "api_token")
 
     if not token:
-        print("❌ ERROR: Could not retrieve Dropbox API token. Please run store_token.py first.")
+        print(
+            "❌ ERROR: Could not retrieve Dropbox API token. "
+            "Please run store_token.py first.")
         return
 
     if token == "INVALID_PASSWORD":
-        print("❌ ERROR: Invalid master password. Could not decrypt Dropbox token.")
+        print(
+            "❌ ERROR: Invalid master password. "
+            "Could not decrypt Dropbox token.")
         return
 
     # 2. Check if the local database file exists
     if not os.path.exists(LOCAL_DB_PATH):
-        print(f"⚠️  WARNING: Local database file '{LOCAL_DB_PATH}' not found. Nothing to back up.")
+        print(
+            f"⚠️  WARNING: Local database file '{LOCAL_DB_PATH}' "
+            "not found. Nothing to back up.")
         return
 
     # 3. Connect to Dropbox and upload the file
@@ -40,14 +47,20 @@ def main():
             # Use the token to create a Dropbox client
             dbx = dropbox.Dropbox(token)
             # Upload the file, overwriting if it already exists
-            dbx.files_upload(f.read(), DROPBOX_DEST_PATH, mode=dropbox.files.WriteMode('overwrite'))
+            dbx.files_upload(
+                f.read(),
+                DROPBOX_DEST_PATH,
+                mode=dropbox.files.WriteMode('overwrite'))
 
-        print(f"✅ SUCCESS: Successfully uploaded database to Dropbox.")
+        print("✅ SUCCESS: Successfully uploaded database to Dropbox.")
 
     except dropbox.exceptions.AuthError:
-        print("❌ ERROR: Dropbox authentication failed. Your API token might be invalid or expired.")
+        print(
+            "❌ ERROR: Dropbox authentication failed. "
+            "Your API token might be invalid or expired.")
     except Exception as e:
         print(f"❌ ERROR: An unexpected error occurred: {e}")
+
 
 if __name__ == "__main__":
     main()
