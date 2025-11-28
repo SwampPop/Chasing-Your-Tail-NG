@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from input_validation import InputValidator
+from cyt_constants import SystemConstants
 
 logger = logging.getLogger(__name__)
 
@@ -22,19 +23,20 @@ class SecureCredentialManager:
 
     def __init__(self, credentials_dir: str = "./secure_credentials"):
         self.credentials_dir = Path(credentials_dir)
-        # Restrict directory permissions
-        self.credentials_dir.mkdir(exist_ok=True, mode=0o700)
+        # Restrict directory permissions to owner-only access
+        self.credentials_dir.mkdir(exist_ok=True,
+                                   mode=SystemConstants.DIR_PERMISSION_PRIVATE)
         self.key_file = self.credentials_dir / ".encryption_key"
         self.credentials_file = self.credentials_dir / "encrypted_credentials.json"
 
     def _generate_key_from_password(self, password: bytes, salt: bytes) -> bytes:
-        """Generate encryption key from password"""
+        """Generate encryption key from password using PBKDF2"""
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
-            length=32,
+            length=SystemConstants.ENCRYPTION_KEY_LENGTH,
             salt=salt,
-            # CHANGED: Increased iterations for stronger key derivation
-            iterations=250000,
+            # Using OWASP recommended iteration count
+            iterations=SystemConstants.PBKDF2_ITERATIONS,
         )
         return base64.urlsafe_b64encode(kdf.derive(password))
 
@@ -50,7 +52,8 @@ class SecureCredentialManager:
 
             with open(self.key_file, 'wb') as f:
                 f.write(json.dumps(key_data).encode())
-            os.chmod(self.key_file, 0o600)
+            # Set file permissions to owner read/write only
+            os.chmod(self.key_file, SystemConstants.FILE_PERMISSION_PRIVATE)
 
         password = self._get_master_password()
         key = self._generate_key_from_password(password.encode(), salt)
@@ -92,12 +95,13 @@ class SecureCredentialManager:
         if not all(x.strip() for x in [service, credential_type, value]):
             raise ValueError("Parameters cannot be empty")
 
-        service = InputValidator.sanitize_string(service, max_length=50)
+        service = InputValidator.sanitize_string(service,
+                                                 max_length=SystemConstants.MAX_STRING_LENGTH)
         credential_type = InputValidator.sanitize_string(
-            credential_type, max_length=50)
+            credential_type, max_length=SystemConstants.MAX_STRING_LENGTH)
 
-        if len(value) > 10000:
-            raise ValueError("Credential value too long")
+        if len(value) > SystemConstants.MAX_CREDENTIAL_LENGTH:
+            raise ValueError(f"Credential value too long (max {SystemConstants.MAX_CREDENTIAL_LENGTH} chars)")
 
         try:
             cipher = self._get_or_create_encryption_key()
@@ -117,14 +121,21 @@ class SecureCredentialManager:
             encrypted_data = cipher.encrypt(json.dumps(credentials).encode())
             with open(self.credentials_file, 'wb') as f:
                 f.write(encrypted_data)
-            os.chmod(self.credentials_file, 0o600)
+            # Secure file permissions
+            os.chmod(self.credentials_file, SystemConstants.FILE_PERMISSION_PRIVATE)
 
             logger.info(
                 f"Stored credential for {service}:{credential_type}")
 
-        except Exception as e:
-            logger.error(f"Failed to store credential: {e}")
-            raise
+        except (IOError, OSError) as e:
+            logger.error(f"File system error storing credential: {e}")
+            raise RuntimeError(f"Failed to write credentials to disk: {e}") from e
+        except (json.JSONDecodeError, json.JSONEncoder) as e:
+            logger.error(f"JSON encoding error storing credential: {e}")
+            raise RuntimeError(f"Failed to encode credentials: {e}") from e
+        except InvalidToken as e:
+            logger.error(f"Encryption error - invalid master password: {e}")
+            raise RuntimeError("Invalid master password - cannot encrypt credentials") from e
 
     def get_credential(self, service: str,
                          credential_type: str) -> Optional[str]:
@@ -151,10 +162,16 @@ class SecureCredentialManager:
             logger.error(
                 "Failed to decrypt credentials. "
                 "The master password may be incorrect.")
-            # Return a specific value for bad passwords
-            return "INVALID_PASSWORD"
-        except Exception as e:
-            logger.error(f"Failed to retrieve credential: {e}")
+            # Return None for bad passwords
+            return None
+        except (IOError, OSError) as e:
+            logger.error(f"File system error reading credentials: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Corrupted credentials file - JSON decode error: {e}")
+            return None
+        except (KeyError, TypeError) as e:
+            logger.error(f"Malformed credentials data: {e}")
             return None
 
     def migrate_from_config(self, config: Dict[str, Any]) -> None:

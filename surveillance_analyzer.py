@@ -10,7 +10,6 @@ import os
 import time
 from datetime import datetime
 import sqlite3
-import math
 
 from surveillance_detector import (SurveillanceDetector,
                                      load_appearances_from_kismet,

@@ -43,13 +43,15 @@ class SurveillanceDetector:
         self.device_history: Dict[str,
                                   List[DeviceAppearance]] = defaultdict(list)
 
+        # Load detection thresholds from config with fallback defaults
+        detection_config = config.get('detection_thresholds', {})
         self.thresholds = {
-            'min_appearances': 3,
-            'min_time_span_hours': 1.0,
-            'min_persistence_score': 0.5,
-            'multi_location_bonus': 0.3,
-            'threat_level_high': 0.8,
-            'threat_level_critical': 0.9
+            'min_appearances': detection_config.get('min_appearances', 3),
+            'min_time_span_hours': detection_config.get('time_span_hours_min', 1.0),
+            'min_persistence_score': detection_config.get('appearance_frequency_threshold', 0.5),
+            'multi_location_bonus': 0.3,  # Keep as constant for now
+            'threat_level_high': detection_config.get('persistence_score_high', 0.8),
+            'threat_level_critical': detection_config.get('persistence_score_critical', 0.9)
         }
 
     def add_device_appearance(self, mac: str, timestamp: float,

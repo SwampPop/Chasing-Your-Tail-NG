@@ -2,6 +2,8 @@
 Secure main logic for Chasing Your Tail - replaces vulnerable SQL operations
 """
 import logging
+import sqlite3
+from typing import List, Set, Dict, Any
 from secure_database import SecureKismetDB, SecureTimeWindows
 
 logger = logging.getLogger(__name__)
@@ -43,11 +45,14 @@ class SecureCYTMonitor:
 
             self._log_initialization_stats()
 
-        except Exception as e:
-            logger.error(f"Failed to initialize tracking lists: {e}")
+        except (sqlite3.Error, RuntimeError) as e:
+            logger.error(f"Database error initializing tracking lists: {e}")
+            raise
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error(f"Configuration or data format error initializing tracking lists: {e}")
             raise
 
-    dict[str, float]
+    def _initialize_mac_lists(self, db: SecureKismetDB, boundaries: dict[str, float]) -> None:
         """Initialize MAC address tracking lists"""
         # Past 5 minutes
         macs = db.get_mac_addresses_by_time_range(boundaries['recent_time'])
@@ -153,8 +158,10 @@ class SecureCYTMonitor:
                 # Check MAC address tracking
                 self._process_mac_tracking(mac)
 
-        except Exception as e:
-            logger.error(f"Error processing current activity: {e}")
+        except (sqlite3.Error, RuntimeError) as e:
+            logger.error(f"Database error processing current activity: {e}")
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.error(f"Data format error processing current activity: {e}")
 
     def _process_probe_requests(self, device_data: Dict, mac: str) -> None:
         """Process probe requests from device data"""
@@ -262,8 +269,10 @@ class SecureCYTMonitor:
 
             self._log_rotation_stats()
 
-        except Exception as e:
-            logger.error(f"Error rotating tracking lists: {e}")
+        except (sqlite3.Error, RuntimeError) as e:
+            logger.error(f"Database error rotating tracking lists: {e}")
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error(f"Data format error rotating tracking lists: {e}")
 
     def _log_rotation_stats(self) -> None:
         """Log rotation statistics"""
