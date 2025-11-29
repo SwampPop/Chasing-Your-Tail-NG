@@ -4,6 +4,7 @@ Spiderweb Sensor Node (Tier 3)
 Lightweight Packet Capture & Forwarding.
 Runs on: Raspberry Pi Zero 2 W
 """
+import sys
 import time
 import json
 import socket
@@ -20,7 +21,6 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
-
 def packet_handler(pkt):
     if pkt.haslayer(Dot11ProbeReq):
         try:
@@ -28,9 +28,8 @@ def packet_handler(pkt):
             mac = pkt.addr2
             ssid = pkt.info.decode('utf-8', 'ignore')
             rssi = pkt.dBm_AntSignal if hasattr(pkt, 'dBm_AntSignal') else -100
-
-            if not ssid:
-                return  # Ignore hidden probes
+            
+            if not ssid: return # Ignore hidden probes
 
             # Build Payload
             payload = {
@@ -40,22 +39,21 @@ def packet_handler(pkt):
                 "rssi": rssi,
                 "ts": time.time()
             }
-
+            
             # Send to Core
             message = json.dumps(payload).encode('utf-8')
             sock.sendto(message, (CORE_IP, CORE_PORT))
-
+            
             # Local log (optional, disable to save SD card)
             # logging.info(f"Forwarded: {mac} -> {ssid} ({rssi}dBm)")
-
-        except Exception:
+            
+        except Exception as e:
             pass
-
 
 def main():
     print(f"🕷️ Spider Sensor '{SENSOR_ID}' Active.")
     print(f"📡 Forwarding Probes to {CORE_IP}:{CORE_PORT}")
-
+    
     # Note: Interface must be in Monitor Mode before running!
     # Usually: 'wlan1' for external Alfa card
     try:
@@ -63,7 +61,6 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
         print("Did you enable Monitor Mode? (airmon-ng start wlan1)")
-
 
 if __name__ == "__main__":
     main()

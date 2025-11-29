@@ -9,22 +9,21 @@ import json
 import sqlite3
 import time
 import logging
+import os
 
 # Configuration
-LISTEN_IP = "0.0.0.0"  # Listen on all interfaces
+LISTEN_IP = "0.0.0.0" # Listen on all interfaces
 LISTEN_PORT = 5555
-DB_PATH = "spiderweb.kismet"  # Dedicated DB for remote sensors
+DB_PATH = "spiderweb.kismet" # Dedicated DB for remote sensors
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
 
 def init_db():
     """Initialize the database schema if it doesn't exist"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
+    
     # Schema matches Kismet/CYT standard
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS devices (
@@ -41,7 +40,6 @@ def init_db():
     """)
     conn.commit()
     return conn
-
 
 def construct_kismet_json(mac, ssid, rssi, sensor_id):
     """Recreate the complex Kismet JSON structure so the analyzer can read it"""
@@ -65,64 +63,58 @@ def construct_kismet_json(mac, ssid, rssi, sensor_id):
         }
     })
 
-
 def main():
-    logger.info(
-        f"🕸️ Spiderweb Core Active. Listening on {LISTEN_IP}:{LISTEN_PORT}")
+    logger.info(f"🕸️ Spiderweb Core Active. Listening on {LISTEN_IP}:{LISTEN_PORT}")
     logger.info(f"📝 Writing to database: {DB_PATH}")
-
+    
     # Setup Networking
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((LISTEN_IP, LISTEN_PORT))
-
+    
     # Setup Database
     conn = init_db()
     cursor = conn.cursor()
-
+    
     try:
         while True:
             # Wait for data from any Spider Sensor
             data, addr = sock.recvfrom(4096)
             try:
                 payload = json.loads(data.decode('utf-8'))
-
+                
                 # Extract fields
                 sensor = payload.get("sensor", "Unknown")
                 mac = payload.get("mac")
                 ssid = payload.get("ssid")
                 rssi = payload.get("rssi")
                 ts = int(payload.get("ts", time.time()))
-
-                if not mac or not ssid:
-                    continue
+                
+                if not mac or not ssid: continue
 
                 # Log to console so you see the hit
                 logger.info(f"[{sensor}] {mac} -> {ssid} ({rssi}dBm)")
-
+                
                 # Build Kismet-compatible JSON blob
-                device_json = construct_kismet_json(
-                    mac, ssid, rssi, sensor)
-
+                device_json = construct_kismet_json(mac, ssid, rssi, sensor)
+                
                 # Insert into DB
                 cursor.execute("""
                     INSERT INTO devices 
-                    (first_time, last_time, devmac, type, device,
-                     min_lat, min_lon, max_lat, max_lon)
+                    (first_time, last_time, devmac, type, device, min_lat, min_lon, max_lat, max_lon)
                     VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0)
                 """, (ts, ts, mac, "Wi-Fi Client", device_json))
-
+                
                 conn.commit()
-
+                
             except json.JSONDecodeError:
                 logger.warning(f"Received invalid JSON from {addr}")
             except Exception as e:
                 logger.error(f"Error processing packet: {e}")
-
+                
     except KeyboardInterrupt:
         logger.info("Shutting down Spiderweb Core...")
     finally:
         conn.close()
-
 
 if __name__ == "__main__":
     main()
