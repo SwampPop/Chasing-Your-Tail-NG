@@ -15,8 +15,18 @@ logs/
 # Temporary databases
 dummy_kismet.db
 watchlist.db
+*.kismet
+
 # Test artifacts
 tests/__pycache__/
 secure_credentials/
 logs/
 test_capture.kismet
+
+# IDE and editor configs
+.claude/
+.vscode/
+.idea/
+
+# Temporary files
+PR_DESCRIPTION.md
