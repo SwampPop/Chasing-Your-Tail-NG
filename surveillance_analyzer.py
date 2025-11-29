@@ -54,7 +54,7 @@ class SurveillanceAnalyzer:
         # Initialize components
         self.detector = SurveillanceDetector(config)
         self.gps_tracker = GPSTracker(config)
-        self.report_generator = ReportGenerator(config)
+        # ReportGenerator is created when needed (after data is loaded)
 
         # Statistics
         self.stats = {
@@ -105,6 +105,54 @@ class SurveillanceAnalyzer:
             f"Total appearances loaded: {total_appearances} "
             f"(Wi-Fi: {self.stats['wifi_appearances']}, BLE: {self.stats['ble_appearances']})"
         )
+
+    def _generate_demo_ble_devices(self) -> None:
+        """Generate simulated BLE devices for demo mode"""
+        import time
+        from cyt_constants import DeviceType
+
+        # Simulated BLE devices with varying threat levels
+        demo_devices = [
+            # High-threat DJI drone appearing multiple times
+            {
+                'mac': 'AA:BB:CC:DD:EE:01',
+                'type': DeviceType.BLE_DRONE.value,
+                'appearances': 8,
+                'locations': ['Phoenix_North', 'Phoenix_Central', 'Phoenix_South']
+            },
+            # Medium-threat AirTag (tracker)
+            {
+                'mac': 'AA:BB:CC:DD:EE:02',
+                'type': DeviceType.BLE_TRACKER.value,
+                'appearances': 5,
+                'locations': ['Phoenix_North', 'Phoenix_Central']
+            },
+            # Low-threat Fitbit (wearable)
+            {
+                'mac': 'AA:BB:CC:DD:EE:03',
+                'type': DeviceType.BLE_WEARABLE.value,
+                'appearances': 3,
+                'locations': ['Phoenix_North']
+            },
+        ]
+
+        base_time = time.time()
+        for device in demo_devices:
+            for i in range(device['appearances']):
+                location = device['locations'][i % len(device['locations'])]
+                # Spread appearances over 6 hours
+                timestamp = base_time - (6 * 3600) + (i * (6 * 3600 / device['appearances']))
+
+                self.detector.add_device_appearance(
+                    mac=device['mac'],
+                    timestamp=timestamp,
+                    location_id=location,
+                    ssids_probed=[],
+                    device_type=device['type']
+                )
+
+        logger.info(f"Generated {len(demo_devices)} demo BLE devices with multiple appearances")
+        self.stats['ble_appearances'] = sum(d['appearances'] for d in demo_devices)
 
     def _extract_location_from_path(self, db_path: str) -> str:
         """Extract location identifier from database path"""
@@ -212,6 +260,15 @@ class SurveillanceAnalyzer:
         """Generate surveillance analysis reports"""
         logger.info("Generating reports...")
 
+        # Create ReportGenerator with actual data
+        report_generator = ReportGenerator(
+            suspicious_devices=suspicious_devices,
+            all_appearances=self.detector.appearances,
+            device_history=self.detector.device_history,
+            thresholds=self.detector.thresholds,
+            config=self.config
+        )
+
         # Create output directory
         report_dir = "surveillance_reports"
         os.makedirs(report_dir, exist_ok=True)
@@ -223,35 +280,13 @@ class SurveillanceAnalyzer:
         md_filename = f"surveillance_report_{timestamp}.md"
         md_path = os.path.join(report_dir, md_filename)
 
-        markdown_content = self.report_generator.generate_markdown_report(
-            suspicious_devices,
-            self.stats,
-            self.gps_tracker.get_location_summary()
-        )
-
-        with open(md_path, 'w') as f:
-            f.write(markdown_content)
-
+        # Use the actual ReportGenerator method
+        markdown_content = report_generator.generate_surveillance_report(md_path)
         logger.info(f"Markdown report saved: {md_path}")
 
-        # Generate HTML report
-        html_filename = f"surveillance_report_{timestamp}.html"
-        html_path = os.path.join(report_dir, html_filename)
-
-        html_content = self.report_generator.generate_html_report(
-            suspicious_devices,
-            self.stats,
-            self.gps_tracker.get_location_summary()
-        )
-
-        with open(html_path, 'w') as f:
-            f.write(html_content)
-
-        logger.info(f"HTML report saved: {html_path}")
-
+        # Note: HTML generation via pandoc is optional, skip for now
         return {
-            'markdown': md_path,
-            'html': html_path
+            'markdown': md_path
         }
 
     def export_kml(self, suspicious_devices: List[SuspiciousDevice]) -> Optional[str]:
@@ -274,7 +309,7 @@ class SurveillanceAnalyzer:
         # Use KMLExporter to generate KML
         exporter = KMLExporter()
         kml_content = exporter.generate_kml(
-            self.gps_tracker.locations,
+            self.gps_tracker,  # Pass GPSTracker object, not list
             suspicious_devices
         )
 
@@ -292,11 +327,13 @@ class SurveillanceAnalyzer:
 
         # Load demo GPS data if in demo mode
         if self.demo_mode:
-            logger.info("Demo mode: Using simulated GPS data")
+            logger.info("Demo mode: Using simulated GPS and BLE data")
             self.gps_tracker.locations = simulate_gps_data()
-
-        # Step 1: Load data from Kismet databases
-        self.load_data_from_kismet_databases()
+            # Generate simulated BLE devices for demo
+            self._generate_demo_ble_devices()
+        else:
+            # Step 1: Load data from Kismet databases
+            self.load_data_from_kismet_databases()
 
         if not self.detector.device_history:
             logger.error("No device data loaded. Exiting.")

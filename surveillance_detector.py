@@ -136,8 +136,15 @@ class SurveillanceDetector:
 
 def load_appearances_from_kismet(db_path: str, detector: SurveillanceDetector,
                                  location_id: str = "unknown") -> int:
-    # ... (function content remains the same)
-    pass
+    """
+    Load Wi-Fi device appearances from Kismet database
+
+    Note: This is a stub implementation. Full Wi-Fi loading should be implemented
+    similar to load_ble_appearances_from_kismet() but for Wi-Fi devices.
+    """
+    # TODO: Implement Wi-Fi device loading (currently stub)
+    logger.debug(f"Wi-Fi loading not implemented for {db_path}")
+    return 0
 
 
 def load_ble_appearances_from_kismet(
