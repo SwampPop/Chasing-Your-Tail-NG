@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import json
-import pathlib
 import glob
 import sqlite3
 import argparse
 import os
 import requests
+from cyt_constants import SystemConstants
 from datetime import datetime
 
 # Load config with secure credentials
@@ -28,35 +28,38 @@ DRONE_OUIS = {
     "40:6C:8F": "DJI Technology",
     "58:6B:14": "DJI Technology",
     "E4:0F:53": "DJI Technology",
-    
+
     # Parrot
     "90:03:B7": "Parrot SA",
     "A0:14:3D": "Parrot SA",
     "00:12:1C": "Parrot SA",
-    
+
     # Autel
-    "00:1C:27": "Autel Robotics", # Note: sometimes generic
-    
+    "00:1C:27": "Autel Robotics",  # Note: sometimes generic
+
     # Skydio
     "D8:3A:DD": "Skydio",
-    
+
     # Yuneec
     "E0:B6:F5": "Yuneec",
-    
+
     # Generic / GoPro
     "F4:DD:9E": "GoPro (Karma)",
 }
+
 
 class ProbeAnalyzer:
     def __init__(self, local_only=True):
         self.wigle_api_key = credential_manager.get_wigle_token()
         self.local_only = local_only
-        
+
         if not self.wigle_api_key and not local_only:
-            print(f"{YELLOW}⚠️  No WiGLE API token found. Defaulting to local analysis.{RESET}")
+            print(
+                f"{YELLOW}⚠️  No WiGLE API token found. "
+                f"Defaulting to local analysis.{RESET}")
             self.local_only = True
 
-        self.probes = {} 
+        self.probes = {}
 
     def check_drone_threat(self, mac):
         """Check if a MAC address belongs to a known drone manufacturer"""
@@ -65,122 +68,151 @@ class ProbeAnalyzer:
             clean_mac = mac.upper()
             # Extract the first 8 chars (XX:XX:XX)
             prefix = clean_mac[:8]
-            
+
             if prefix in DRONE_OUIS:
                 return DRONE_OUIS[prefix]
-        except:
+        except (AttributeError, TypeError, IndexError):
+            # Invalid MAC format - not a string or too short
             pass
         return None
 
     def parse_database(self, db_path):
         print(f"[*] Reading database: {db_path}")
         try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            
-            # Get both Clients and APs (Drones often act as APs)
-            query = "SELECT device FROM devices WHERE type='Wi-Fi Client' OR type='Wi-Fi AP'"
-            cursor.execute(query)
-            
-            rows = cursor.fetchall()
-            
-            for row in rows:
-                try:
-                    data = json.loads(row[0])
-                    mac = data.get('kismet.device.base.macaddr')
-                    
-                    # Check for Drone Threat IMMEDIATELY
-                    drone_manuf = self.check_drone_threat(mac)
-                    
-                    # Extract Probed SSIDs
-                    if 'dot11.device' in data and 'dot11.device.probed_ssid_map' in data['dot11.device']:
-                        probed_map = data['dot11.device']['dot11.device.probed_ssid_map']
-                        for result in probed_map:
-                            ssid = result.get('dot11.probedssid.ssid')
-                            last_seen = result.get('dot11.probedssid.last_time')
-                            
-                            if ssid and len(ssid) > 0:
-                                if ssid not in self.probes:
-                                    self.probes[ssid] = {
-                                        'count': 0,
-                                        'macs': set(),
-                                        'timestamps': [],
-                                        'drones': [] # Track if a drone probed this
-                                    }
-                                
-                                self.probes[ssid]['count'] += 1
-                                self.probes[ssid]['macs'].add(mac)
-                                
-                                if drone_manuf:
-                                    self.probes[ssid]['drones'].append(f"{drone_manuf} ({mac})")
-                                    
-                                if last_seen:
-                                    self.probes[ssid]['timestamps'].append(last_seen)
-                                    
-                except (json.JSONDecodeError, AttributeError):
-                    continue
-            
-            conn.close()
-        except Exception as e:
-            print(f"{RED}[!] Error reading database: {e}{RESET}")
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.cursor()
+
+                # Get both Clients and APs (Drones often act as APs)
+                query = ("SELECT device FROM devices WHERE "
+                         "type='Wi-Fi Client' OR type='Wi-Fi AP'")
+                cursor.execute(query)
+
+                rows = cursor.fetchall()
+
+                for row in rows:
+                    try:
+                        data = json.loads(row[0])
+                        mac = data.get('kismet.device.base.macaddr')
+
+                        # Check for Drone Threat IMMEDIATELY
+                        drone_manuf = self.check_drone_threat(mac)
+
+                        # Extract Probed SSIDs
+                        if ('dot11.device' in data and
+                                'dot11.device.probed_ssid_map' in
+                                data['dot11.device']):
+                            probed_map = data['dot11.device'][
+                                'dot11.device.probed_ssid_map']
+                            for result in probed_map:
+                                ssid = result.get('dot11.probedssid.ssid')
+                                last_seen = result.get(
+                                    'dot11.probedssid.last_time')
+
+                                if ssid and len(ssid) > 0:
+                                    if ssid not in self.probes:
+                                        self.probes[ssid] = {
+                                            'count': 0,
+                                            'macs': set(),
+                                            'timestamps': [],
+                                            'drones': []
+                                        }
+
+                                    self.probes[ssid]['count'] += 1
+                                    self.probes[ssid]['macs'].add(mac)
+
+                                    if drone_manuf:
+                                        self.probes[ssid]['drones'].append(
+                                            f"{drone_manuf} ({mac})")
+
+                                    if last_seen:
+                                        self.probes[ssid]['timestamps'].append(
+                                            last_seen)
+
+                    except (json.JSONDecodeError, AttributeError, KeyError, TypeError):
+                        # Invalid JSON, missing fields, or malformed data
+                        continue
+
+        except sqlite3.Error as e:
+            print(f"{RED}[!] Database error: {e}{RESET}")
+        except (IOError, OSError) as e:
+            print(f"{RED}[!] File system error: {e}{RESET}")
 
     def query_wigle(self, ssid):
         if self.local_only or not self.wigle_api_key:
             return None
-            
+
         print(f"   🌐 Querying WiGLE for: {ssid}")
         headers = {'Authorization': f'Basic {self.wigle_api_key}'}
         params = {'ssid': ssid}
-        
+
         # Standard search bounds from config would go here
-        
+
         try:
-            response = requests.get('https://api.wigle.net/api/v2/network/search', headers=headers, params=params)
+            response = requests.get(
+                'https://api.wigle.net/api/v2/network/search',
+                headers=headers, params=params,
+                timeout=SystemConstants.WIGLE_API_TIMEOUT_SECONDS)
             if response.status_code == 200:
                 return response.json()
-        except:
-            pass
+        except requests.exceptions.Timeout:
+            print(f"   ⏱️  WiGLE query timed out for {ssid}")
+        except requests.exceptions.ConnectionError:
+            print(f"   🔌 Network connection error querying WiGLE")
+        except requests.exceptions.RequestException as e:
+            print(f"   ❌ WiGLE API error: {e}")
+        except (json.JSONDecodeError, ValueError):
+            print(f"   ⚠️  Invalid response from WiGLE API")
         return None
 
     def run_analysis(self, db_path):
         self.parse_database(db_path)
-        
-        sorted_ssids = sorted(self.probes.items(), key=lambda x: len(x[1]['macs']), reverse=True)
-        
+
+        sorted_ssids = sorted(self.probes.items(),
+                              key=lambda x: len(x[1]['macs']), reverse=True)
+
         print("\n" + "="*60)
-        print(f"CYT DRONE & PROBE HUNTER")
+        print("CYT DRONE & PROBE HUNTER")
         print("="*60)
-        
+
         drone_count = 0
-        
+
         for ssid, data in sorted_ssids:
             unique_devices = len(data['macs'])
             drones_found = data['drones']
-            
+
             # --- ALERT LOGIC ---
-            
+
             # 1. DRONE DETECTED
             if len(drones_found) > 0:
                 drone_count += 1
-                print(f"\n{RED}[!!!] DRONE DETECTED PROBING SSID: {ssid}{RESET}")
+                print(
+                    f"\n{RED}[!!!] DRONE DETECTED PROBING SSID: {ssid}{RESET}")
                 for d in drones_found:
                     print(f"{RED}   └─ TARGET IDENTIFIED: {d}{RESET}")
-            
+
             # 2. RARE TARGETS (Potential Surveillance)
-            elif unique_devices < 3: 
+            elif unique_devices < 3:
                 print(f"\n[TARGET] SSID: {ssid}")
-                print(f"   ├─ Devices probing: {unique_devices} {list(data['macs'])}")
-                
+                print(
+                    f"   ├─ Devices probing: {unique_devices} "
+                    f"{list(data['macs'])}")
+
                 # Run WiGLE only on high interest
                 wigle_data = self.query_wigle(ssid)
                 if wigle_data and 'results' in wigle_data:
-                     results = wigle_data['results']
-                     print(f"   └─ 🌍 WiGLE: Found {len(results)} locations.")
-                     if results:
-                         print(f"      📍 Last seen near: {results[0].get('trilat')}, {results[0].get('trilong')}")
+                    results = wigle_data['results']
+                    print(
+                        f"   └─ 🌍 WiGLE: Found {len(results)} locations.")
+                    if results:
+                        print(
+                            "      📍 Last seen near: "
+                            f"{results[0].get('trilat')}, "
+                            f"{results[0].get('trilong')}")
 
         if drone_count == 0:
-            print(f"\n{GREEN}[*] No Drones Detected in this capture.{RESET}")
+            print(
+                f"\n{GREEN}[*] No Drones Detected in this capture.{RESET}")
+
 
 def get_latest_db():
     files = glob.glob("*.kismet") + glob.glob("/var/log/kismet/*.kismet")
@@ -188,20 +220,23 @@ def get_latest_db():
         return None
     return max(files, key=os.path.getctime)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--wigle', action='store_true', help='Enable WiGLE API')
-    parser.add_argument('--local', action='store_true', help='Force local only')
+    parser.add_argument('--wigle', action='store_true',
+                        help='Enable WiGLE API')
+    parser.add_argument('--local', action='store_true',
+                        help='Force local only')
     parser.add_argument('--db', help='Specific Kismet DB file')
     args = parser.parse_args()
 
     is_local = True
     if args.wigle:
         is_local = False
-        
+
     analyzer = ProbeAnalyzer(local_only=is_local)
     target_db = args.db if args.db else get_latest_db()
-    
+
     if target_db:
         analyzer.run_analysis(target_db)
     else:
