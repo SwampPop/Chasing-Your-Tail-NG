@@ -138,3 +138,70 @@ def load_appearances_from_kismet(db_path: str, detector: SurveillanceDetector,
                                  location_id: str = "unknown") -> int:
     # ... (function content remains the same)
     pass
+
+
+def load_ble_appearances_from_kismet(
+        db_path: str,
+        detector: SurveillanceDetector,
+        location_id: str = "unknown",
+        start_time: float = None,
+        end_time: float = None) -> int:
+    """
+    Load BLE device appearances from Kismet database and add to detector
+
+    Args:
+        db_path: Path to Kismet .kismet database file
+        detector: SurveillanceDetector instance to populate
+        location_id: Location identifier for GPS correlation
+        start_time: Optional start timestamp for filtering
+        end_time: Optional end timestamp for filtering
+
+    Returns:
+        Number of BLE device appearances loaded
+    """
+    from secure_database import SecureKismetDB
+    from ble_classifier import BLEClassifier
+
+    classifier = BLEClassifier()
+    appearances_loaded = 0
+
+    try:
+        with SecureKismetDB(db_path) as db:
+            # Get BLE devices from database
+            if start_time is None:
+                # Default to last 24 hours if not specified
+                import time
+                start_time = time.time() - (24 * 3600)
+
+            ble_devices = db.get_ble_devices_by_time_range(start_time, end_time)
+            logger.info(f"Found {len(ble_devices)} BLE devices in database")
+
+            for device in ble_devices:
+                # Classify the device
+                device_type = classifier.classify_device(device)
+
+                # Only track surveillance-relevant devices
+                if classifier.is_likely_surveillance_device(device_type):
+                    detector.add_device_appearance(
+                        mac=device['mac'],
+                        timestamp=device['last_time'],
+                        location_id=location_id,
+                        ssids_probed=[],  # BLE doesn't have SSIDs
+                        device_type=device_type.value
+                    )
+                    appearances_loaded += 1
+                    logger.debug(
+                        f"Loaded BLE device: {device['mac']} "
+                        f"({device_type.value}) at {location_id}"
+                    )
+
+            logger.info(
+                f"Loaded {appearances_loaded} surveillance-relevant "
+                f"BLE device appearances"
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to load BLE appearances from {db_path}: {e}")
+        raise
+
+    return appearances_loaded

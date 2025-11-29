@@ -206,6 +206,78 @@ class SecureKismetDB:
         params = (time_threshold,)
         return self.execute_safe_query(query, params)
 
+    def get_ble_devices_by_time_range(
+            self, start_time: float,
+            end_time: float | None = None) -> list[dict[str, Any]]:
+        """
+        Get BLE devices within time range with proper parameterization
+        Returns devices with bluetooth.device data parsed
+        """
+        if end_time is not None:
+            query = ("SELECT devmac, type, device, last_time, phyname FROM devices "
+                     "WHERE phyname = 'Bluetooth' AND last_time >= ? AND last_time <= ?")
+            params = (start_time, end_time)
+        else:
+            query = ("SELECT devmac, type, device, last_time, phyname FROM devices "
+                     "WHERE phyname = 'Bluetooth' AND last_time >= ?")
+            params = (start_time,)
+
+        rows = self.execute_safe_query(query, params)
+
+        # Parse BLE device data
+        ble_devices = []
+        for row in rows:
+            try:
+                device_data = None
+                if row['device']:
+                    device_data = json.loads(row['device'])
+
+                ble_device = {
+                    'mac': row['devmac'],
+                    'type': row['type'],
+                    'device_data': device_data,
+                    'last_time': row['last_time'],
+                    'phyname': row['phyname']
+                }
+
+                # Extract BLE-specific fields if available
+                if device_data and 'bluetooth.device' in device_data:
+                    bt_data = device_data.get('bluetooth.device', {})
+                    ble_device['manufacturer'] = bt_data.get('bluetooth.device.manufacturer', None)
+                    ble_device['name'] = bt_data.get('bluetooth.device.name', '')
+                    ble_device['uuid_list'] = bt_data.get('bluetooth.device.uuid_list', [])
+
+                ble_devices.append(ble_device)
+
+            except (json.JSONDecodeError, TypeError, KeyError) as e:
+                logger.warning(
+                    f"Failed to parse BLE device JSON for {row['devmac']}: {e}")
+                continue
+
+        return ble_devices
+
+    def check_for_ble_drones_secure(self, time_window_seconds: int) -> List[Dict[str, Any]]:
+        """Securely check for BLE drones (DJI, Parrot, Autel) seen recently."""
+        ble_devices = self.get_ble_devices_by_time_range(
+            int(time.time()) - time_window_seconds
+        )
+
+        # Filter for known drone manufacturers
+        from cyt_constants import SystemConstants
+        drone_manufacturers = [
+            SystemConstants.BLE_MANUFACTURER_DJI,
+            SystemConstants.BLE_MANUFACTURER_PARROT,
+            SystemConstants.BLE_MANUFACTURER_AUTEL
+        ]
+
+        drones = []
+        for device in ble_devices:
+            manufacturer = device.get('manufacturer')
+            if manufacturer in drone_manufacturers:
+                drones.append(device)
+
+        return drones
+
 
 class SecureTimeWindows:
     """Secure time window management for device tracking"""

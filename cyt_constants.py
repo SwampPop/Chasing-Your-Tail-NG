@@ -12,6 +12,10 @@ class DeviceType(Enum):
     UAV = "UAV"
     DRONE = "DRONE"
     BLUETOOTH = "Bluetooth"
+    BLE_TRACKER = "BLE Tracker"  # AirTags, Tiles, SmartTags
+    BLE_WEARABLE = "BLE Wearable"  # Fitness trackers, smartwatches
+    BLE_DRONE = "BLE Drone"  # DJI, Parrot, Autel drones
+    BLE_UNKNOWN = "BLE Unknown"  # Generic BLE devices
     UNKNOWN = "Unknown"
 
     @classmethod
@@ -101,6 +105,17 @@ class SystemConstants:
 
     # Database limits
     DB_CONNECTION_TIMEOUT = 30.0       # SQLite connection timeout in seconds
+
+    # BLE Manufacturer IDs (Company Identifiers)
+    # See: https://www.bluetooth.com/specifications/assigned-numbers/company-identifiers/
+    BLE_MANUFACTURER_APPLE = 0x004C      # Apple Inc. (AirTags, AirPods, etc.)
+    BLE_MANUFACTURER_DJI = 0x0B41        # DJI drones
+    BLE_MANUFACTURER_PARROT = 0x0043     # Parrot drones
+    BLE_MANUFACTURER_AUTEL = 0x0A5C      # Autel Robotics drones (Broadcom = Autel uses this)
+    BLE_MANUFACTURER_SAMSUNG = 0x0075    # Samsung (SmartTags)
+    BLE_MANUFACTURER_TILE = 0x004E       # Tile trackers
+    BLE_MANUFACTURER_FITBIT = 0x0057     # Fitbit wearables
+    BLE_MANUFACTURER_GARMIN = 0x0087     # Garmin wearables
 
     @classmethod
     def get_description(cls, constant_name: str) -> str:
