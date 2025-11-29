@@ -10,6 +10,8 @@ from datetime import datetime
 import shutil
 
 # CHANGED: The banner has been updated as requested.
+
+
 def print_banner():
     print("""
 ╔══════════════════════════════════════════════════════════════╗
@@ -18,27 +20,33 @@ def print_banner():
 ╚══════════════════════════════════════════════════════════════╝
     """)
 
+
 def print_step(step, description):
     print(f"\n🎯 Step {step}: {description}")
     print("=" * 60)
+
 
 def check_dependencies():
     """Checks if all required external commands are available."""
     print_step(0, "Pre-flight Dependency Check")
     all_ok = True
-    for cmd in ['python3']: 
+    for cmd in ['python3']:
         if not shutil.which(cmd):
-            print(f"  ❌ ERROR: Command '{cmd}' not found. Please ensure it's installed and in your PATH.")
+            print(
+                f"  ❌ ERROR: Command '{cmd}' not found. "
+                "Please ensure it's installed and in your PATH.")
             all_ok = False
     if not all_ok:
         sys.exit("Demo cannot continue due to missing dependencies.")
     print("  ✅ All dependencies found.")
 
+
 def run_command(cmd, description):
     """Runs a command and returns its standard output on success."""
     print(f"📡 {description}...")
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True, timeout=60)
         if result.returncode == 0:
             print("✅ Success!")
             return result.stdout
@@ -52,26 +60,28 @@ def run_command(cmd, description):
         print(f"⚠️ Note: {str(e)[:100]}...")
         return None
 
+
 def main():
     print_banner()
-    
+
     check_dependencies()
-    
-    print(f"🕒 Demo started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
+    print(
+        f"🕒 Demo started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
     print_step(1, "Security Verification")
     print("🔒 Verifying security hardening...")
     print("✅ SQL injection prevention: ACTIVE")
-    print("✅ Encrypted credentials: ENABLED") 
+    print("✅ Encrypted credentials: ENABLED")
     print("✅ Input validation: ACTIVE")
     print("✅ Secure ignore list loading: ACTIVE")
-    
+
     print_step(2, "Core Features Demo")
-    
+
     print("\n📊 CYT Core Capabilities:")
     features = [
         "Real-time device monitoring",
-        "Advanced persistence detection algorithms", 
+        "Advanced persistence detection algorithms",
         "Multi-location tracking and correlation",
         "Spectacular Google Earth KML visualization",
         "HTML report generation with pandoc",
@@ -80,27 +90,32 @@ def main():
     ]
     for feature in features:
         print(f"  ✅ {feature}")
-    
+
     print_step(3, "Demo Analysis")
     print("🎯 Running surveillance analysis with demo data...")
-    
+
     kml_file_generated = None
     if os.path.exists("surveillance_analyzer.py"):
-        output = run_command("python3 surveillance_analyzer.py --demo", 
-                             "Executing surveillance detection with simulated GPS route")
-        
+        output = run_command("python3 surveillance_analyzer.py --demo",
+                             "Executing surveillance detection "
+                             "with simulated GPS route")
+
         if output:
             for line in output.splitlines():
                 if line.strip().startswith("KML:"):
                     kml_file_generated = line.split(":", 1)[1].strip()
                     break
     else:
-        print("⚠️ surveillance_analyzer.py not found - ensure you're in the correct directory")
-    
+        print(
+            "⚠️ surveillance_analyzer.py not found - "
+            "ensure you're in the correct directory")
+
     print_step(4, "Output Files Generated")
-    
-    for path, description in [("surveillance_reports/", "Surveillance analysis reports (MD/HTML)"),
-                              ("kml_files/", "Google Earth KML visualizations")]:
+
+    for path, description in [("surveillance_reports/",
+                               "Surveillance analysis reports (MD/HTML)"),
+                              ("kml_files/",
+                               "Google Earth KML visualizations")]:
         if os.path.exists(path):
             print(f"  ✅ {path} - {description}")
         else:
@@ -108,9 +123,12 @@ def main():
 
     if kml_file_generated:
         if os.path.exists(kml_file_generated):
-            print(f"  ✅ {kml_file_generated} - Demo KML created successfully")
+            print(
+                f"  ✅ {kml_file_generated} - Demo KML created successfully")
         else:
-            print(f"  ❌ {kml_file_generated} - KML file was expected but not found")
+            print(
+                f"  ❌ {kml_file_generated} - "
+                "KML file was expected but not found")
     else:
         print("  🟡 KML file was not generated by the analysis script.")
 
@@ -118,7 +136,7 @@ def main():
     print("🗺️ KML Visualization Features:")
     kml_features = [
         "Color-coded persistence level markers",
-        "Device tracking paths with movement correlation", 
+        "Device tracking paths with movement correlation",
         "Rich interactive balloon content",
         "Activity heatmaps and intensity zones",
         "Temporal analysis overlays",
@@ -126,23 +144,24 @@ def main():
     ]
     for feature in kml_features:
         print(f"  🎨 {feature}")
-    
+
     if kml_file_generated:
-        print(f"\n📁 Open '{kml_file_generated}' in Google Earth to see")
+        print(
+            f"\n📁 Open '{kml_file_generated}' in Google Earth to see")
         print("   spectacular visualization of device following detection!")
-    
+
     print_step(6, "Final Summary")
     print("""
 🎪 Demo Complete! Key highlights:
 
 🔥 SPECTACULAR FEATURES:
   • Professional Google Earth visualization with advanced KML styling
-  • Multi-location device tracking with visual correlation paths  
+  • Multi-location device tracking with visual correlation paths
   • Security-hardened architecture (SQL injection prevention)
   • Multi-format reporting (Markdown, HTML, KML)
   • Real-time GPS integration with Bluetooth support
 
-📊 TECHNICAL EXCELLENCE:  
+📊 TECHNICAL EXCELLENCE:
   • Advanced persistence detection algorithms
   • Location clustering and session management
   • Professional GUI with surveillance analysis buttons
@@ -156,6 +175,7 @@ def main():
 
 🌟 Project ready for presentation!
     """)
+
 
 if __name__ == "__main__":
     main()

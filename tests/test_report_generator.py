@@ -1,10 +1,12 @@
 import unittest
 from datetime import datetime
 from collections import defaultdict
+import os
 
 # We need to import the classes we are testing and the data structures it depends on
 from report_generator import ReportGenerator
 from surveillance_detector import SuspiciousDevice, DeviceAppearance
+
 
 class TestReportGenerator(unittest.TestCase):
     """
@@ -18,19 +20,25 @@ class TestReportGenerator(unittest.TestCase):
         """
         # ARRANGE: Create mock data
         now = datetime.now()
-        
+
         # Create a history of all device sightings
         self.all_appearances = [
-            DeviceAppearance('AA:AA:AA:AA:AA:AA', now.timestamp() - 300, 'Location A', [], 'Wi-Fi Client'),
-            DeviceAppearance('AA:AA:AA:AA:AA:AA', now.timestamp() - 200, 'Location B', [], 'Wi-Fi Client'),
-            DeviceAppearance('BB:BB:BB:BB:BB:BB', now.timestamp() - 100, 'Location A', [], 'Wi-Fi AP'),
+            DeviceAppearance(
+                'AA:AA:AA:AA:AA:AA', now.timestamp() - 300,
+                'Location A', [], 'Wi-Fi Client'),
+            DeviceAppearance(
+                'AA:AA:AA:AA:AA:AA', now.timestamp() - 200,
+                'Location B', [], 'Wi-Fi Client'),
+            DeviceAppearance(
+                'BB:BB:BB:BB:BB:BB', now.timestamp() - 100,
+                'Location A', [], 'Wi-Fi AP'),
         ]
-        
+
         # Create a history grouped by MAC address
         self.device_history = defaultdict(list)
         for app in self.all_appearances:
             self.device_history[app.mac].append(app)
-            
+
         # Create a list of devices that the detector has flagged as suspicious
         self.suspicious_devices = [
             SuspiciousDevice(
@@ -42,7 +50,7 @@ class TestReportGenerator(unittest.TestCase):
                 locations_seen=['Location A', 'Location B']
             )
         ]
-        
+
         # Define the thresholds the reporter will use
         self.thresholds = {'min_appearances': 3}
 
@@ -58,11 +66,40 @@ class TestReportGenerator(unittest.TestCase):
             device_history=self.device_history,
             thresholds=self.thresholds
         )
-        
+
         # ASSERT: Check if the calculated stats match our mock data
         self.assertEqual(reporter.stats['total_appearances'], 3)
         self.assertEqual(reporter.stats['unique_devices'], 2)
         self.assertEqual(reporter.stats['unique_locations'], 2)
-        
+
         # Test the multi-location calculation (1 out of 2 devices was multi-location)
         self.assertEqual(reporter.stats['multi_location_rate'], 0.5)
+
+    def test_generate_surveillance_report(self):
+        """
+        Tests if the generate_surveillance_report method produces a report
+        with the expected content.
+        """
+        # ARRANGE
+        reporter = ReportGenerator(
+            suspicious_devices=self.suspicious_devices,
+            all_appearances=self.all_appearances,
+            device_history=self.device_history,
+            thresholds=self.thresholds
+        )
+        output_file = "test_report.md"
+
+        # ACT
+        report_text = reporter.generate_surveillance_report(output_file)
+
+        # ASSERT
+        self.assertIn("SURVEILLANCE DETECTION ANALYSIS", report_text)
+        self.assertIn("Device Analysis: `AA:AA:AA:AA:AA:AA`", report_text)
+        self.assertIn("Followed across 2 different locations", report_text)
+
+        # CLEANUP
+        if os.path.exists(output_file):
+            os.remove(output_file)
+        html_file = output_file.replace('.md', '.html')
+        if os.path.exists(html_file):
+            os.remove(html_file)
