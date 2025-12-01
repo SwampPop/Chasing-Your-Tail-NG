@@ -59,7 +59,7 @@ class SecureKismetDB:
                 f"Database query failed: {query}, params: {params}, error: {e}")
             raise
 
-    # NEW: Helper method to consolidate JSON parsing logic
+    # Helper method to consolidate JSON parsing logic
     def _parse_device_row(self, row: sqlite3.Row) -> dict[str, Any]:
         """Safely parses the JSON from a device row."""
         try:
@@ -67,12 +67,20 @@ class SecureKismetDB:
             if row['device']:
                 device_data = json.loads(row['device'])
 
-            return {
+            parsed = {
                 'mac': row['devmac'],
                 'type': row['type'],
                 'device_data': device_data,
                 'last_time': row['last_time']
             }
+
+            # Add GPS coordinates if available
+            if 'min_lat' in row.keys():
+                parsed['lat'] = row['min_lat']
+            if 'min_lon' in row.keys():
+                parsed['lon'] = row['min_lon']
+
+            return parsed
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(
                 f"Failed to parse device JSON for {row['devmac']}: {e}")
@@ -82,20 +90,21 @@ class SecureKismetDB:
             self, start_time: float,
             end_time: float | None = None) -> list[dict[str, Any]]:
         """
-        Get devices within time range with proper parameterization
+        Get devices within time range with proper parameterization.
+        UPDATED: Now fetches GPS coordinates.
         """
         if end_time is not None:
-            query = ("SELECT devmac, type, device, last_time FROM devices "
+            query = ("SELECT devmac, type, device, last_time, min_lat, min_lon FROM devices "
                      "WHERE last_time >= ? AND last_time <= ?")
             params = (start_time, end_time)
         else:
-            query = ("SELECT devmac, type, device, last_time FROM devices "
+            query = ("SELECT devmac, type, device, last_time, min_lat, min_lon FROM devices "
                      "WHERE last_time >= ?")
             params = (start_time,)
 
         rows = self.execute_safe_query(query, params)
 
-        # CHANGED: Using the new helper method for cleaner code
+        # Using the helper method for cleaner code
         devices = [self._parse_device_row(row) for row in rows]
         return [d for d in devices if d is not None]
 
