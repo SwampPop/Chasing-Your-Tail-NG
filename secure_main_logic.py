@@ -7,10 +7,18 @@ import logging
 import sqlite3
 import time
 from datetime import datetime
-from typing import List, Set, Dict, Any
+from typing import List, Set, Dict, Any, Optional
 from secure_database import SecureKismetDB, SecureTimeWindows
 
 logger = logging.getLogger(__name__)
+
+# Import AlertManager - make it optional for backwards compatibility
+try:
+    from alert_manager import AlertManager
+    ALERT_MANAGER_AVAILABLE = True
+except ImportError:
+    ALERT_MANAGER_AVAILABLE = False
+    logger.warning("AlertManager not available - alerts will only be logged")
 
 # ANSI Colors for Console Alerts
 RED = "\033[91m"
@@ -39,13 +47,24 @@ class SecureCYTMonitor:
     """Secure monitoring logic for CYT"""
 
     def __init__(self, config: dict, ignore_list: List[str],
-                 ssid_ignore_list: List[str], log_file):
+                 ssid_ignore_list: List[str], log_file,
+                 alert_manager: Optional['AlertManager'] = None):
         self.config = config
         # Convert to set for O(1) lookup
         self.ignore_list = set(mac.upper() for mac in ignore_list)
         self.ssid_ignore_list = set(ssid_ignore_list)
         self.log_file = log_file
         self.time_manager = SecureTimeWindows(config)
+
+        # Alert Manager integration (optional but recommended)
+        self.alert_manager = alert_manager
+        if not alert_manager and ALERT_MANAGER_AVAILABLE:
+            logger.info("AlertManager not provided, creating default instance")
+            try:
+                self.alert_manager = AlertManager()
+            except Exception as e:
+                logger.warning(f"Could not initialize AlertManager: {e}")
+                self.alert_manager = None
 
         # Initialize tracking lists
         self.past_five_mins_macs: Set[str] = set()
@@ -60,6 +79,9 @@ class SecureCYTMonitor:
 
         # Alert throttling (prevent spamming the same alert)
         self.alert_cooldowns: Dict[str, float] = {}
+
+        # Detection tracking for history recording
+        self.recent_detections: List[Dict[str, Any]] = []
 
     def _log_to_console(self, message: str) -> None:
         """Writes to stdout and the log file if available"""
@@ -81,6 +103,27 @@ class SecureCYTMonitor:
             return DRONE_OUIS.get(prefix)
         except Exception:
             return None
+
+    def _record_detection(self, mac: str, detection_type: str, threat_score: int = 0,
+                          lat: Optional[float] = None, lon: Optional[float] = None) -> None:
+        """Record a detection for later history archiving"""
+        detection = {
+            'mac': mac,
+            'timestamp': time.time(),
+            'detection_type': detection_type,
+            'threat_score': threat_score,
+            'location_id': None  # Will be set later if GPS available
+        }
+        if lat and lon:
+            detection['latitude'] = lat
+            detection['longitude'] = lon
+        self.recent_detections.append(detection)
+
+    def get_and_clear_detections(self) -> List[Dict[str, Any]]:
+        """Get all recent detections and clear the buffer"""
+        detections = self.recent_detections.copy()
+        self.recent_detections.clear()
+        return detections
 
     def initialize_tracking_lists(self, db: SecureKismetDB) -> None:
         """Initialize all tracking lists securely"""
@@ -217,6 +260,24 @@ class SecureCYTMonitor:
                             f"{RED}   Time:   {datetime.now().strftime('%H:%M:%S')}{RESET}"
                         )
                         self._log_to_console(alert_msg)
+
+                        # Send alert via AlertManager (audio + Telegram)
+                        if self.alert_manager:
+                            clean_msg = f"DRONE DETECTED: {drone_manuf} - MAC: {mac}"
+                            try:
+                                self.alert_manager.send_alert(clean_msg, priority="critical")
+                                logger.info("Drone alert sent via AlertManager")
+                            except Exception as e:
+                                logger.error(f"Failed to send drone alert: {e}")
+
+                        # Record detection for history
+                        self._record_detection(
+                            mac,
+                            detection_type=f"DRONE:{drone_manuf}",
+                            lat=device.get('lat'),
+                            lon=device.get('lon')
+                        )
+
                         self.alert_cooldowns[mac] = now
 
                 # Check for probe requests
@@ -305,6 +366,23 @@ class SecureCYTMonitor:
             if now - last_alert > 60:
                 self._log_to_console(
                     f"{YELLOW}[!] PERSISTENT TARGET: {mac} (Score: {threat_score}){RESET}")
+
+                # Send alert via AlertManager
+                if self.alert_manager:
+                    clean_msg = f"PERSISTENT TARGET DETECTED: {mac} - Threat Score: {threat_score}/11"
+                    try:
+                        self.alert_manager.send_alert(clean_msg, priority="high")
+                        logger.info("Persistence alert sent via AlertManager")
+                    except Exception as e:
+                        logger.error(f"Failed to send persistence alert: {e}")
+
+                # Record detection for history
+                self._record_detection(
+                    mac,
+                    detection_type="PERSISTENT",
+                    threat_score=threat_score
+                )
+
                 self.alert_cooldowns[f"stalk_{mac}"] = now
 
         # Check against historical lists for standard logging

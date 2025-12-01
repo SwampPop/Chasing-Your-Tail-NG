@@ -17,6 +17,8 @@ from secure_ignore_loader import load_ignore_lists
 from secure_database import SecureKismetDB
 from secure_main_logic import SecureCYTMonitor
 from secure_credentials import secure_config_loader
+from lib import history_manager
+from config_validator import validate_config_file
 
 class CYTMonitorApp:
     """
@@ -65,6 +67,15 @@ class CYTMonitorApp:
     def initialize(self):
         """Loads configuration and initializes all components."""
         try:
+            # Validate configuration before loading
+            logging.info("Validating configuration...")
+            is_valid, error_msg, validated_config = validate_config_file('config.json')
+            if not is_valid:
+                logging.critical(f"Configuration validation failed:\n{error_msg}")
+                print(f"\n✗ Configuration Error:\n{error_msg}\n")
+                print("Please fix config.json and try again.")
+                return False
+
             logging.info("Loading configuration and credentials...")
             self.config, self.credential_manager = secure_config_loader('config.json')
             
@@ -101,13 +112,22 @@ class CYTMonitorApp:
                 self.log_file_handle
             )
             
+            # Initialize history database for persistent detection tracking
+            logging.info("Initializing history database...")
+            try:
+                history_manager.initialize_history_database()
+                logging.info("History database initialized successfully")
+            except Exception as e:
+                logging.warning(f"Could not initialize history database: {e}")
+                # Continue anyway - history is nice-to-have, not critical
+
             # Test database connection and initialize tracking lists
             logging.info("Validating database and initializing tracking lists...")
             with SecureKismetDB(self.latest_kismet_db) as db:
                 if not db.validate_connection():
                     raise RuntimeError("Database validation failed")
                 self.secure_monitor.initialize_tracking_lists(db)
-            
+
             logging.info("Initialization complete. Starting main loop.")
             return True
         except Exception as e:
@@ -132,16 +152,25 @@ class CYTMonitorApp:
                 # Process current activity with secure database operations
                 with SecureKismetDB(self.latest_kismet_db) as db:
                     self.secure_monitor.process_current_activity(db)
-                    
+
                     # Rotate tracking lists every N cycles
                     time_count += 1
                     if time_count % list_update_interval == 0:
                         logging.info(f"Rotating tracking lists (cycle {time_count})")
                         self.secure_monitor.rotate_tracking_lists(db)
-                        
+
+                # Archive detections to history database
+                detections = self.secure_monitor.get_and_clear_detections()
+                if detections:
+                    try:
+                        history_manager.archive_appearances(detections)
+                        logging.info(f"Archived {len(detections)} detections to history database")
+                    except Exception as e:
+                        logging.error(f"Failed to archive detections: {e}")
+
             except Exception as e:
                 logging.error(f"Error in monitoring loop: {e}", exc_info=True)
-            
+
             # Sleep for the configured interval
             time.sleep(check_interval)
 
