@@ -25,5 +25,14 @@
         "old": 15,
         "oldest": 20
     }
+  },
+  "kismet_health": {
+    "enabled": true,
+    "check_interval_cycles": 5,
+    "data_freshness_threshold_minutes": 5,
+    "auto_restart": false,
+    "max_restart_attempts": 3,
+    "startup_script": "./start_kismet_clean.sh",
+    "interface": "wlan0mon"
   }
 }
