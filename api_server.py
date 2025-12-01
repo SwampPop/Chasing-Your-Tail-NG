@@ -2,11 +2,16 @@
 """
 CYT API Server (Phase 4)
 Provides a REST API for mobile apps (iPhone) to query the system status.
+
+SECURITY: Requires API key authentication via X-API-Key header.
+Generate key: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+Set environment variable: export CYT_API_KEY="your_generated_key"
 """
 import logging
 import time
 import json
 import os
+from functools import wraps
 from flask import Flask, jsonify, request
 from secure_database import SecureKismetDB
 from secure_credentials import secure_config_loader
@@ -20,6 +25,29 @@ app = Flask(__name__)
 
 # Initialize Config
 config, _ = secure_config_loader('config.json')
+
+# API Key Authentication
+def require_api_key(f):
+    """Decorator to require API key authentication"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+        expected_key = os.getenv('CYT_API_KEY')
+
+        if not expected_key:
+            logger.error("CYT_API_KEY environment variable not set!")
+            return jsonify({"error": "Server configuration error - API key not configured"}), 500
+
+        if not api_key:
+            logger.warning(f"API request without key from {request.remote_addr}")
+            return jsonify({"error": "API key required. Set X-API-Key header"}), 401
+
+        if api_key != expected_key:
+            logger.warning(f"Invalid API key attempt from {request.remote_addr}")
+            return jsonify({"error": "Invalid API key"}), 403
+
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Helper to find the latest DB
 def get_latest_db():
@@ -42,14 +70,16 @@ def get_latest_db():
 
 @app.route('/')
 def index():
-    """Health Check"""
+    """Health Check - Public endpoint"""
     return jsonify({
         "system": "Chasing Your Tail NG",
         "status": "Online",
-        "version": "2.3-API"
+        "version": "2.3-API",
+        "auth_required": True
     })
 
 @app.route('/status')
+@require_api_key
 def get_status():
     db_path = get_latest_db()
     if not db_path:
@@ -118,10 +148,12 @@ def get_status():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/targets')
+@require_api_key
 def get_targets():
     """
     Returns specific persistent targets (The 'Stalkers').
     Note: This is a simplified check for the API demo.
+    Requires authentication via X-API-Key header.
     """
     # For Phase 4 demo, we'll just return raw count of 'old' devices
     # In Phase 5, we connect this to the actual persistence engine results
