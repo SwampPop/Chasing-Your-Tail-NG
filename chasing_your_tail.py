@@ -19,6 +19,14 @@ from secure_main_logic import SecureCYTMonitor
 from secure_credentials import secure_config_loader
 from lib import history_manager
 from config_validator import validate_config_file
+from kismet_health_monitor import KismetHealthMonitor
+
+# Try to import AlertManager for health alerts
+try:
+    from alert_manager import AlertManager
+    ALERT_MANAGER_AVAILABLE = True
+except ImportError:
+    ALERT_MANAGER_AVAILABLE = False
 
 class CYTMonitorApp:
     """
@@ -32,6 +40,8 @@ class CYTMonitorApp:
         self.probe_ignore_list = set()
         self.latest_kismet_db = None
         self.secure_monitor = None
+        self.health_monitor = None  # Kismet health monitoring
+        self.alert_manager = None  # Alert system for health failures
         self.log_file_handle = None # Added to hold the file handle
         self._setup_logging()
 
@@ -121,6 +131,35 @@ class CYTMonitorApp:
                 logging.warning(f"Could not initialize history database: {e}")
                 # Continue anyway - history is nice-to-have, not critical
 
+            # Initialize AlertManager for health check alerts
+            if ALERT_MANAGER_AVAILABLE:
+                try:
+                    self.alert_manager = AlertManager()
+                    logging.info("AlertManager initialized for health notifications")
+                except Exception as e:
+                    logging.warning(f"Could not initialize AlertManager: {e}")
+            else:
+                logging.info("AlertManager not available - health alerts will only be logged")
+
+            # Initialize Kismet health monitor
+            health_config = self.config.get('kismet_health', {})
+            if health_config.get('enabled', False):
+                logging.info("Initializing Kismet health monitor...")
+                try:
+                    self.health_monitor = KismetHealthMonitor(
+                        db_path_pattern=self.config['paths']['kismet_logs'],
+                        startup_script=health_config.get('startup_script', './start_kismet_clean.sh'),
+                        max_restart_attempts=health_config.get('max_restart_attempts', 3),
+                        data_freshness_threshold_minutes=health_config.get('data_freshness_threshold_minutes', 5),
+                        auto_restart=health_config.get('auto_restart', False)
+                    )
+                    logging.info(f"Kismet health monitoring enabled (auto-restart: {health_config.get('auto_restart', False)})")
+                except Exception as e:
+                    logging.error(f"Failed to initialize health monitor: {e}")
+                    self.health_monitor = None
+            else:
+                logging.info("Kismet health monitoring disabled in config")
+
             # Test database connection and initialize tracking lists
             logging.info("Validating database and initializing tracking lists...")
             with SecureKismetDB(self.latest_kismet_db) as db:
@@ -141,10 +180,14 @@ class CYTMonitorApp:
         time_count = 0
         check_interval = self.config.get('timing', {}).get('check_interval', 60)
         list_update_interval = self.config.get('timing', {}).get('list_update_interval', 5)
+        health_check_interval = self.config.get('kismet_health', {}).get('check_interval_cycles', 5)
+        kismet_interface = self.config.get('kismet_health', {}).get('interface', 'wlan0mon')
 
         logging.info("Starting secure CYT monitoring loop...")
         print(f"🔒 SECURE MODE: All SQL injection vulnerabilities have been eliminated!")
         print(f"Monitoring every {check_interval} seconds, updating lists every {list_update_interval} cycles")
+        if self.health_monitor:
+            print(f"⚕️  Kismet health monitoring enabled (checking every {health_check_interval} cycles)")
         print("Press Control+C to shut down gracefully.")
 
         while True:
@@ -158,6 +201,36 @@ class CYTMonitorApp:
                     if time_count % list_update_interval == 0:
                         logging.info(f"Rotating tracking lists (cycle {time_count})")
                         self.secure_monitor.rotate_tracking_lists(db)
+
+                # Perform Kismet health check every N cycles
+                if self.health_monitor and time_count % health_check_interval == 0:
+                    logging.info(f"Performing Kismet health check (cycle {time_count})")
+                    health_status = self.health_monitor.monitor_and_recover(interface=kismet_interface)
+
+                    if not health_status['healthy']:
+                        # Log health issues
+                        issues_str = ", ".join(health_status['issues'])
+                        logging.error(f"⚠️  Kismet health check FAILED: {issues_str}")
+
+                        # Send alert if AlertManager available
+                        if self.alert_manager:
+                            alert_msg = f"Kismet Health Alert: {issues_str}"
+                            if health_status.get('recovery_attempted'):
+                                if health_status.get('recovery_successful'):
+                                    alert_msg += " | Auto-restart SUCCESSFUL"
+                                    logging.warning("✓ Kismet auto-restart succeeded")
+                                else:
+                                    alert_msg += " | Auto-restart FAILED - manual intervention required!"
+                                    logging.critical("✗ Kismet auto-restart failed!")
+
+                            try:
+                                self.alert_manager.send_alert(alert_msg, priority="critical")
+                            except Exception as e:
+                                logging.error(f"Failed to send health alert: {e}")
+                        else:
+                            logging.warning("No AlertManager - health issue not sent to notifications")
+                    else:
+                        logging.debug(f"✓ Kismet health check passed | {self.health_monitor.get_status_summary()}")
 
                 # Archive detections to history database
                 detections = self.secure_monitor.get_and_clear_detections()

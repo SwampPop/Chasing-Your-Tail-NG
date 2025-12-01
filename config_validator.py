@@ -142,6 +142,45 @@ CONFIG_SCHEMA = {
                     "minimum": 60
                 }
             }
+        },
+        "kismet_health": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Enable Kismet health monitoring"
+                },
+                "check_interval_cycles": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "How often to check Kismet health (in monitoring cycles)"
+                },
+                "data_freshness_threshold_minutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60,
+                    "description": "Alert if no new data in X minutes"
+                },
+                "auto_restart": {
+                    "type": "boolean",
+                    "description": "Automatically restart Kismet on failure"
+                },
+                "max_restart_attempts": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "description": "Max auto-restart attempts before giving up"
+                },
+                "startup_script": {
+                    "type": "string",
+                    "description": "Path to Kismet startup script"
+                },
+                "interface": {
+                    "type": "string",
+                    "description": "Wireless interface for Kismet (e.g., wlan0mon)"
+                }
+            }
         }
     }
 }
