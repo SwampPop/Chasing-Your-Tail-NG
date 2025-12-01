@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from typing import List, Set, Dict, Any, Optional
 from secure_database import SecureKismetDB, SecureTimeWindows
+from behavioral_drone_detector import BehavioralDroneDetector
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,15 @@ class SecureCYTMonitor:
 
         # Detection tracking for history recording
         self.recent_detections: List[Dict[str, Any]] = []
+
+        # Behavioral Drone Detector
+        behavior_config = self.config.get('behavioral_drone_detection', {})
+        if behavior_config.get('enabled', False):
+            self.behavioral_detector = BehavioralDroneDetector(config)
+            logger.info("Behavioral drone detection enabled")
+        else:
+            self.behavioral_detector = None
+            logger.info("Behavioral drone detection disabled")
 
     def _log_to_console(self, message: str) -> None:
         """Writes to stdout and the log file if available"""
@@ -280,10 +290,67 @@ class SecureCYTMonitor:
 
                         self.alert_cooldowns[mac] = now
 
+                # THREAT CHECK 2: BEHAVIORAL DRONE DETECTION
+                if self.behavioral_detector:
+                    # Prepare device data for behavioral analysis
+                    analysis_data = {
+                        'mac': mac,
+                        'signal': device_data.get('kismet.device.base.signal', {}).get('kismet.common.signal.last_signal', -100),
+                        'lat': device.get('lat'),
+                        'lon': device.get('lon'),
+                        'channel': device_data.get('kismet.device.base.channel', 0),
+                        'type': device_data.get('kismet.device.base.type', 'unknown'),
+                        'num_clients': device_data.get('kismet.device.base.num_associated_clients', 0)
+                    }
+
+                    # Update device history
+                    self.behavioral_detector.update_device_history(mac, analysis_data)
+
+                    # Analyze for behavioral drone patterns
+                    confidence, patterns = self.behavioral_detector.analyze_device(mac)
+                    confidence_threshold = self.config.get('behavioral_drone_detection', {}).get('confidence_threshold', 0.60)
+
+                    if confidence >= confidence_threshold:
+                        # Check cooldown (alert max once every 60 seconds per behavioral drone)
+                        last_alert = self.alert_cooldowns.get(f"behavioral_{mac}", 0)
+                        if now - last_alert > 60:
+                            alert_msg = (
+                                f"{YELLOW}[!!!] BEHAVIORAL DRONE DETECTED [!!!]{RESET}\n"
+                                f"{YELLOW}   MAC:        {mac}{RESET}\n"
+                                f"{YELLOW}   Confidence: {confidence:.1%}{RESET}\n"
+                                f"{YELLOW}   Time:       {datetime.now().strftime('%H:%M:%S')}{RESET}\n"
+                                f"{YELLOW}   Patterns:   {sum(1 for p in patterns.values() if p.get('detected'))}/9 detected{RESET}"
+                            )
+                            self._log_to_console(alert_msg)
+
+                            # Send alert via AlertManager
+                            if self.alert_manager:
+                                clean_msg = f"BEHAVIORAL DRONE DETECTED: {mac} - Confidence: {confidence:.1%}"
+                                try:
+                                    self.alert_manager.send_alert(clean_msg, priority="high")
+                                    logger.info("Behavioral drone alert sent via AlertManager")
+                                except Exception as e:
+                                    logger.error(f"Failed to send behavioral drone alert: {e}")
+
+                            # Record detection with confidence score
+                            self._record_detection(
+                                mac,
+                                detection_type=f"BEHAVIORAL_DRONE",
+                                threat_score=int(confidence * 100),  # Convert to 0-100 scale
+                                lat=device.get('lat'),
+                                lon=device.get('lon')
+                            )
+
+                            # Log detailed pattern summary
+                            summary = self.behavioral_detector.get_detection_summary(mac, confidence, patterns)
+                            logger.info(f"Behavioral drone details:\n{summary}")
+
+                            self.alert_cooldowns[f"behavioral_{mac}"] = now
+
                 # Check for probe requests
                 self._process_probe_requests(device_data, mac)
 
-                # THREAT CHECK 2: PERSISTENCE (STALKER)
+                # THREAT CHECK 3: PERSISTENCE (STALKER)
                 self._process_mac_tracking(mac, now)
 
         except (sqlite3.Error, RuntimeError) as e:
@@ -432,6 +499,12 @@ class SecureCYTMonitor:
                 [p['ssid'] for p in probes])
 
             self._log_rotation_stats()
+
+            # Clean up old behavioral detector history
+            if self.behavioral_detector:
+                max_age = self.config.get('behavioral_drone_detection', {}).get('history_cleanup_hours', 24)
+                self.behavioral_detector.cleanup_old_history(max_age_hours=max_age)
+                logger.debug(f"Behavioral detector history cleanup completed (max age: {max_age}h)")
 
         except (sqlite3.Error, RuntimeError) as e:
             logger.error(f"Database error rotating tracking lists: {e}")

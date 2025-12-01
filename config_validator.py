@@ -181,6 +181,69 @@ CONFIG_SCHEMA = {
                     "description": "Wireless interface for Kismet (e.g., wlan0mon)"
                 }
             }
+        },
+        "behavioral_drone_detection": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Enable behavioral drone detection"
+                },
+                "min_appearances": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "Minimum appearances before analysis"
+                },
+                "confidence_threshold": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "description": "Minimum confidence for drone alert (0.0-1.0)"
+                },
+                "signal_variance_threshold": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "Signal variance threshold for movement detection"
+                },
+                "rapid_movement_threshold_mps": {
+                    "type": "number",
+                    "minimum": 1.0,
+                    "maximum": 100.0,
+                    "description": "Rapid movement threshold in meters per second"
+                },
+                "hovering_radius_meters": {
+                    "type": "number",
+                    "minimum": 1.0,
+                    "maximum": 500.0,
+                    "description": "Hovering pattern radius in meters"
+                },
+                "brief_appearance_seconds": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 3600,
+                    "description": "Brief appearance threshold in seconds"
+                },
+                "high_signal_threshold": {
+                    "type": "integer",
+                    "minimum": -100,
+                    "maximum": 0,
+                    "description": "High signal threshold in dBm"
+                },
+                "probe_frequency_per_minute": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "description": "High probe frequency threshold (probes/minute)"
+                },
+                "history_cleanup_hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 168,
+                    "description": "How long to keep device history (hours)"
+                }
+            }
         }
     }
 }
