@@ -34,5 +34,17 @@
     "max_restart_attempts": 3,
     "startup_script": "./start_kismet_clean.sh",
     "interface": "wlan0mon"
+  },
+  "behavioral_drone_detection": {
+    "enabled": true,
+    "min_appearances": 3,
+    "confidence_threshold": 0.60,
+    "signal_variance_threshold": 20,
+    "rapid_movement_threshold_mps": 15.0,
+    "hovering_radius_meters": 50.0,
+    "brief_appearance_seconds": 300,
+    "high_signal_threshold": -50,
+    "probe_frequency_per_minute": 10,
+    "history_cleanup_hours": 24
   }
 }
