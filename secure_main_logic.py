@@ -1,12 +1,38 @@
 """
-Secure main logic for Chasing Your Tail - replaces vulnerable SQL operations
+Secure Main Logic for CYT
+Core monitoring engine that handles device tracking, persistence detection,
+and immediate threat alerting (Drones).
 """
 import logging
 import sqlite3
+import time
+from datetime import datetime
 from typing import List, Set, Dict, Any
 from secure_database import SecureKismetDB, SecureTimeWindows
 
 logger = logging.getLogger(__name__)
+
+# ANSI Colors for Console Alerts
+RED = "\033[91m"
+YELLOW = "\033[93m"
+GREEN = "\033[92m"
+RESET = "\033[0m"
+
+# Known Drone Manufacturer OUIs
+DRONE_OUIS = {
+    "60:60:1F": "DJI Technology",
+    "34:D2:62": "DJI Technology",
+    "40:6C:8F": "DJI Technology",
+    "58:6B:14": "DJI Technology",
+    "E4:0F:53": "DJI Technology",
+    "90:03:B7": "Parrot SA",
+    "A0:14:3D": "Parrot SA",
+    "00:12:1C": "Parrot SA",
+    "00:1C:27": "Autel Robotics",
+    "D8:3A:DD": "Skydio",
+    "E0:B6:F5": "Yuneec",
+    "F4:DD:9E": "GoPro (Karma)",
+}
 
 
 class SecureCYTMonitor:
@@ -32,6 +58,30 @@ class SecureCYTMonitor:
         self.ten_fifteen_min_ago_ssids: Set[str] = set()
         self.fifteen_twenty_min_ago_ssids: Set[str] = set()
 
+        # Alert throttling (prevent spamming the same alert)
+        self.alert_cooldowns: Dict[str, float] = {}
+
+    def _log_to_console(self, message: str) -> None:
+        """Writes to stdout and the log file if available"""
+        # Print to screen (with colors if applicable)
+        print(message)
+
+        # Write clean text to log file (strip ANSI codes for file)
+        if self.log_file:
+            clean_msg = message.replace(RED, "").replace(
+                GREEN, "").replace(YELLOW, "").replace(RESET, "")
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self.log_file.write(f"[{timestamp}] {clean_msg}\n")
+            self.log_file.flush()
+
+    def check_drone_threat(self, mac: str) -> str | None:
+        """Fast lookup for drone manufacturers"""
+        try:
+            prefix = mac.upper()[:8]
+            return DRONE_OUIS.get(prefix)
+        except Exception:
+            return None
+
     def initialize_tracking_lists(self, db: SecureKismetDB) -> None:
         """Initialize all tracking lists securely"""
         try:
@@ -49,7 +99,8 @@ class SecureCYTMonitor:
             logger.error(f"Database error initializing tracking lists: {e}")
             raise
         except (KeyError, TypeError, ValueError) as e:
-            logger.error(f"Configuration or data format error initializing tracking lists: {e}")
+            logger.error(
+                f"Configuration or data format error initializing tracking lists: {e}")
             raise
 
     def _initialize_mac_lists(self, db: SecureKismetDB, boundaries: dict[str, float]) -> None:
@@ -140,6 +191,7 @@ class SecureCYTMonitor:
         """Process current activity and detect matches"""
         try:
             boundaries = self.time_manager.get_time_boundaries()
+            now = time.time()
 
             # Get current devices and probes
             current_devices = db.get_devices_by_time_range(
@@ -152,11 +204,26 @@ class SecureCYTMonitor:
                 if not mac:
                     continue
 
+                # THREAT CHECK 1: DRONE HUNTER
+                drone_manuf = self.check_drone_threat(mac)
+                if drone_manuf:
+                    # Check cooldown (alert max once every 30 seconds per drone)
+                    last_alert = self.alert_cooldowns.get(mac, 0)
+                    if now - last_alert > 30:
+                        alert_msg = (
+                            f"{RED}[!!!] DRONE DETECTED [!!!]{RESET}\n"
+                            f"{RED}   Target: {drone_manuf}{RESET}\n"
+                            f"{RED}   MAC:    {mac}{RESET}\n"
+                            f"{RED}   Time:   {datetime.now().strftime('%H:%M:%S')}{RESET}"
+                        )
+                        self._log_to_console(alert_msg)
+                        self.alert_cooldowns[mac] = now
+
                 # Check for probe requests
                 self._process_probe_requests(device_data, mac)
 
-                # Check MAC address tracking
-                self._process_mac_tracking(mac)
+                # THREAT CHECK 2: PERSISTENCE (STALKER)
+                self._process_mac_tracking(mac, now)
 
         except (sqlite3.Error, RuntimeError) as e:
             logger.error(f"Database error processing current activity: {e}")
@@ -216,12 +283,31 @@ class SecureCYTMonitor:
             logger.warning(
                 f"Repeated probe detected: {ssid} (15-20 min window)")
 
-    def _process_mac_tracking(self, mac: str) -> None:
-        """Process MAC address tracking"""
+    def _process_mac_tracking(self, mac: str, now: float) -> None:
+        """Process MAC address tracking with persistence scoring"""
         if mac.upper() in self.ignore_list:
             return
 
-        # Check against historical lists
+        # Calculate threat score based on persistence across time buckets
+        threat_score = 0
+        if mac in self.past_five_mins_macs:
+            threat_score += 1
+        if mac in self.five_ten_min_ago_macs:
+            threat_score += 2
+        if mac in self.ten_fifteen_min_ago_macs:
+            threat_score += 3
+        if mac in self.fifteen_twenty_min_ago_macs:
+            threat_score += 5
+
+        # High persistence alert (Score >= 6 implies seen across multiple windows)
+        if threat_score >= 6:
+            last_alert = self.alert_cooldowns.get(f"stalk_{mac}", 0)
+            if now - last_alert > 60:
+                self._log_to_console(
+                    f"{YELLOW}[!] PERSISTENT TARGET: {mac} (Score: {threat_score}){RESET}")
+                self.alert_cooldowns[f"stalk_{mac}"] = now
+
+        # Check against historical lists for standard logging
         if mac in self.five_ten_min_ago_macs:
             message = f"{mac} in 5 to 10 mins list"
             print(message)
