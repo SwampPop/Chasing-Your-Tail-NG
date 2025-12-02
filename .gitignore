@@ -43,3 +43,10 @@ HARDWARE_REQUIREMENTS.md
 HEALTH_MONITORING.md
 HEALTH_MONITOR_TEST_RESULTS.md
 INTEGRATION_SUMMARY.md
+
+# Research files (local only)
+PI_RESEARCH_SUMMARY.txt
+RASPBERRY_PI_COMPARISON.md
+
+# Beast mode hardware documentation (local only)
+docs/
