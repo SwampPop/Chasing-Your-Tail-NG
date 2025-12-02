@@ -1,6 +1,6 @@
 # Chasing Your Tail (CYT)
 
-A comprehensive Wi-Fi probe request analyzer that monitors and tracks wireless devices by analyzing their probe requests. The system integrates with Kismet for packet capture and WiGLE API for SSID geolocation analysis, featuring advanced surveillance detection capabilities.
+A comprehensive wireless threat detection system that monitors and classifies wireless devices using behavioral pattern analysis. The system detects drones, war driving, rogue access points, packet sniffers, stalking patterns, and more - providing intelligent threat classification with specific response recommendations.
 
 ## 🚨 Security Notice
 
@@ -16,10 +16,22 @@ This project has been security-hardened to eliminate critical vulnerabilities:
 
 ### Core Detection
 - **Real-time Wi-Fi monitoring** with Kismet integration
+- **🆕 Multi-threat classification system** - Automatically identifies 8 threat types:
+  - **🚁 DRONE** - Aerial vehicles / drones
+  - **🚗 WAR_DRIVING** - Mobile reconnaissance from vehicles
+  - **📡 ROGUE_AP** - Evil twin / rogue access points
+  - **👁️ PACKET_SNIFFER** - Passive monitoring devices
+  - **🎯 STALKING** - Following patterns across locations
+  - **🚶 WALK_BY_ATTACK** - Brief proximity attacks
+  - **🔍 PENETRATION_TEST** - Active security scanning
+  - **❓ UNKNOWN** - Suspicious but unclassified behavior
 - **Multi-layer threat detection**:
   - **OUI matching** - Instant detection of known drones (DJI, Parrot, 3DR, Autel)
-  - **🆕 Behavioral drone detection** - 9-pattern analysis catches unknown/custom drones (60%+ confidence threshold)
-  - **Persistence scoring** - Time-window based surveillance detection (5/10/15/20 minute windows)
+  - **Behavioral analysis** - 9-pattern analysis with confidence scoring
+  - **Persistence scoring** - Time-window based surveillance detection
+- **🆕 Intelligent threat classification** - Pattern-based threat type identification
+- **🆕 Threat-specific recommendations** - Tailored response strategies for each threat type
+- **🆕 Comprehensive behavioral reports** - Detailed analysis with GPS tracking and pattern breakdowns
 - **🆕 Kismet health monitoring** - Multi-layer health checking with auto-restart capability
 
 ### Analysis & Visualization
@@ -36,6 +48,32 @@ This project has been security-hardened to eliminate critical vulnerabilities:
 - **Organized file structure** with dedicated output directories
 - **Comprehensive logging** and analysis tools
 - **Systemd integration** for production deployments
+
+## Multi-Threat Detection
+
+CYT is not just a drone detector - it's a general-purpose wireless threat intelligence platform:
+
+### What It Detects
+
+**8 Distinct Threat Types** identified automatically:
+- **Drones** (DJI, custom-built, aerial surveillance)
+- **War Driving** (vehicle-based network mapping)
+- **Rogue APs** (evil twin attacks, credential harvesting)
+- **Packet Sniffers** (passive traffic monitoring)
+- **Stalking** (devices following your movements)
+- **Walk-By Attacks** (pedestrian proximity threats)
+- **Penetration Tests** (active security scanning)
+- **Unknown Threats** (suspicious but unclassified)
+
+### How It Works
+
+- **9 Behavioral Patterns** analyzed per device
+- **Speed-Based Discrimination** (aerial/vehicle/pedestrian/stationary)
+- **Pattern Combination Matching** for accurate classification
+- **Confidence Scoring** for both detection and classification
+- **Threat-Specific Recommendations** for each type
+
+📖 **See the [Multi-Threat Detection Guide](MULTI_THREAT_DETECTION.md) for complete details, real-world scenarios, and response strategies.**
 
 ## Requirements
 
