@@ -14,18 +14,28 @@ This project has been security-hardened to eliminate critical vulnerabilities:
 
 ## Features
 
+### Core Detection
 - **Real-time Wi-Fi monitoring** with Kismet integration
-- **Advanced surveillance detection** with persistence scoring
+- **Multi-layer threat detection**:
+  - **OUI matching** - Instant detection of known drones (DJI, Parrot, 3DR, Autel)
+  - **🆕 Behavioral drone detection** - 9-pattern analysis catches unknown/custom drones (60%+ confidence threshold)
+  - **Persistence scoring** - Time-window based surveillance detection (5/10/15/20 minute windows)
+- **🆕 Kismet health monitoring** - Multi-layer health checking with auto-restart capability
+
+### Analysis & Visualization
+- **Advanced surveillance detection** with GPS correlation and location clustering
 - **🆕 Automatic GPS integration** - extracts coordinates from Bluetooth GPS via Kismet
-- **GPS correlation** and location clustering (100m threshold)
 - **Spectacular KML visualization** for Google Earth with professional styling and interactive content
 - **Multi-format reporting** - Markdown, HTML (with pandoc), and KML outputs
-- **Time-window tracking** (5, 10, 15, 20 minute windows)
 - **WiGLE API integration** for SSID geolocation
 - **Multi-location tracking algorithms** for detecting following behavior
+
+### System Management
+- **🆕 Unified daemon orchestration** - Single-command start/stop/restart/status for all components
 - **Enhanced GUI interface** with surveillance analysis button
 - **Organized file structure** with dedicated output directories
 - **Comprehensive logging** and analysis tools
+- **Systemd integration** for production deployments
 
 ## Requirements
 
@@ -71,12 +81,44 @@ python3 cyt_gui.py  # Enhanced GUI with surveillance analysis
 - Real-time status monitoring and file generation notifications
 
 ### Command Line Monitoring
+
+**🆕 Unified Daemon** (Recommended - starts all components):
+```bash
+# Start all components (Kismet + Monitor + API)
+sudo python3 cyt_daemon.py start
+
+# Check status
+python3 cyt_daemon.py status
+
+# Stop all components
+sudo python3 cyt_daemon.py stop
+
+# Restart all components
+sudo python3 cyt_daemon.py restart
+```
+
+**Manual Component Startup** (Legacy/Debugging):
 ```bash
 # Start core monitoring (secure)
 python3 chasing_your_tail.py
 
 # Start Kismet (ONLY working script - July 23, 2025 fix)
-./start_kismet_clean.sh
+sudo ./start_kismet_clean.sh wlan0mon
+```
+
+**Production Deployment** (Systemd):
+```bash
+# Install and enable service
+sudo cp cyt.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable cyt
+sudo systemctl start cyt
+
+# Check status
+sudo systemctl status cyt
+
+# View logs
+sudo journalctl -u cyt -f
 ```
 
 ### Data Analysis
