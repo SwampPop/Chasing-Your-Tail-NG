@@ -26,6 +26,7 @@ report_*.txt
 *.kismet
 !test_capture.kismet
 surveillance_reports/
+behavioral_reports/
 kml_files/
 analysis_logs/
 reports/
