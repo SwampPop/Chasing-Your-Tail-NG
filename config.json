@@ -46,5 +46,9 @@
     "high_signal_threshold": -50,
     "probe_frequency_per_minute": 10,
     "history_cleanup_hours": 24
+  },
+  "behavioral_report": {
+    "output_dir": "behavioral_reports",
+    "auto_generate": true
   }
 }

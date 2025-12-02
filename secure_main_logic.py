@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import List, Set, Dict, Any, Optional
 from secure_database import SecureKismetDB, SecureTimeWindows
 from behavioral_drone_detector import BehavioralDroneDetector
+from behavioral_report_generator import BehavioralReportGenerator, BehavioralDetection
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +89,12 @@ class SecureCYTMonitor:
         behavior_config = self.config.get('behavioral_drone_detection', {})
         if behavior_config.get('enabled', False):
             self.behavioral_detector = BehavioralDroneDetector(config)
+            self.behavioral_report_generator = BehavioralReportGenerator(config)
             logger.info("Behavioral drone detection enabled")
+            logger.info("Behavioral report generator initialized")
         else:
             self.behavioral_detector = None
+            self.behavioral_report_generator = None
             logger.info("Behavioral drone detection disabled")
 
     def _log_to_console(self, message: str) -> None:
@@ -344,6 +348,25 @@ class SecureCYTMonitor:
                             # Log detailed pattern summary
                             summary = self.behavioral_detector.get_detection_summary(mac, confidence, patterns)
                             logger.info(f"Behavioral drone details:\n{summary}")
+
+                            # Generate detailed behavioral detection report
+                            if self.behavioral_report_generator:
+                                try:
+                                    detection = BehavioralDetection(
+                                        mac=mac,
+                                        timestamp=now,
+                                        confidence=confidence,
+                                        patterns=patterns,
+                                        device_history=self.behavioral_detector.device_history[mac],
+                                        oui_manufacturer=analysis_data.get('manufacturer')
+                                    )
+                                    report_path = self.behavioral_report_generator.save_report(detection)
+                                    logger.info(f"Behavioral detection report generated: {report_path}")
+                                    self._log_to_console(
+                                        f"{YELLOW}   Report:     {report_path}{RESET}"
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to generate behavioral detection report: {e}")
 
                             self.alert_cooldowns[f"behavioral_{mac}"] = now
 
