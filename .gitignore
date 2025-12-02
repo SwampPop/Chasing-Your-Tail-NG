@@ -29,3 +29,10 @@ surveillance_reports/
 kml_files/
 analysis_logs/
 reports/
+
+# Personal/local-only files
+.last-session-end
+CLAUDE.md
+GEMINI.md
+PROJECT_CONTEXT.md
+todo.md
