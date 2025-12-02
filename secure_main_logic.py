@@ -349,6 +349,11 @@ class SecureCYTMonitor:
                             summary = self.behavioral_detector.get_detection_summary(mac, confidence, patterns)
                             logger.info(f"Behavioral drone details:\n{summary}")
 
+                            # Classify threat type
+                            threat_type, type_confidence, type_reasoning = self.behavioral_detector.classify_threat_type(
+                                mac, confidence, patterns
+                            )
+
                             # Generate detailed behavioral detection report
                             if self.behavioral_report_generator:
                                 try:
@@ -358,10 +363,17 @@ class SecureCYTMonitor:
                                         confidence=confidence,
                                         patterns=patterns,
                                         device_history=self.behavioral_detector.device_history[mac],
-                                        oui_manufacturer=analysis_data.get('manufacturer')
+                                        oui_manufacturer=analysis_data.get('manufacturer'),
+                                        threat_type=threat_type,
+                                        threat_type_confidence=type_confidence,
+                                        threat_type_reasoning=type_reasoning
                                     )
                                     report_path = self.behavioral_report_generator.save_report(detection)
                                     logger.info(f"Behavioral detection report generated: {report_path}")
+                                    logger.info(f"Threat classified as: {threat_type} ({type_confidence:.1%} confidence)")
+                                    self._log_to_console(
+                                        f"{YELLOW}   Type:       {threat_type} ({type_confidence:.0%} confidence){RESET}"
+                                    )
                                     self._log_to_console(
                                         f"{YELLOW}   Report:     {report_path}{RESET}"
                                     )

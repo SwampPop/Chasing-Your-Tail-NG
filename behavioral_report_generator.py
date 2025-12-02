@@ -30,6 +30,9 @@ class BehavioralDetection:
     device_history: Any  # DeviceHistory object from behavioral_drone_detector.py
     oui_manufacturer: Optional[str] = None
     threat_level: Optional[str] = None
+    threat_type: Optional[str] = None  # DRONE, WAR_DRIVING, ROGUE_AP, etc.
+    threat_type_confidence: Optional[float] = None  # Confidence in threat type classification
+    threat_type_reasoning: Optional[str] = None  # Why this threat type was chosen
 
 
 class BehavioralReportGenerator:
@@ -74,6 +77,28 @@ class BehavioralReportGenerator:
             return ('LOW', '🟢', 'green')
         else:
             return ('MINIMAL', '⚪', 'gray')
+
+    def get_threat_type_info(self, threat_type: str) -> Tuple[str, str]:
+        """
+        Get emoji and description for threat type.
+
+        Args:
+            threat_type: Threat type classification
+
+        Returns:
+            Tuple of (emoji, description)
+        """
+        threat_info = {
+            'DRONE': ('🚁', 'Aerial Vehicle / Drone'),
+            'WAR_DRIVING': ('🚗', 'War Driving / Mobile Reconnaissance'),
+            'ROGUE_AP': ('📡', 'Rogue Access Point / Evil Twin'),
+            'PACKET_SNIFFER': ('👁️', 'Packet Sniffer / Passive Monitor'),
+            'STALKING': ('🎯', 'Stalking / Following Pattern'),
+            'WALK_BY_ATTACK': ('🚶', 'Walk-By Attack / Proximity Threat'),
+            'PENETRATION_TEST': ('🔍', 'Penetration Test / Active Scan'),
+            'UNKNOWN': ('❓', 'Unknown Threat Type')
+        }
+        return threat_info.get(threat_type, ('⚠️', 'Unclassified Threat'))
 
     def generate_confidence_bar(self, confidence: float, width: int = 50) -> str:
         """
@@ -362,7 +387,7 @@ class BehavioralReportGenerator:
 
     def generate_recommendations(self, detection: BehavioralDetection) -> str:
         """
-        Generate actionable recommendations based on detection.
+        Generate actionable recommendations based on detection and threat type.
 
         Args:
             detection: BehavioralDetection object
@@ -374,31 +399,109 @@ class BehavioralReportGenerator:
         lines.append("### 💡 Recommendations\n")
 
         threat_level, _, _ = self.determine_threat_level(detection.confidence)
+        threat_type = detection.threat_type or 'UNKNOWN'
 
+        # Threat-specific recommendations
+        lines.append("**Threat-Specific Actions:**\n")
+
+        if threat_type == 'DRONE':
+            lines.append("**🚁 Drone Detection Response:**")
+            lines.append("1. Visually scan the area for aerial vehicles")
+            lines.append("2. Document flight path and behavior")
+            lines.append("3. Note altitude, speed, and direction of travel")
+            lines.append("4. Check local drone regulations (FAA in US)")
+            lines.append("5. If near sensitive area, report to security/authorities")
+            lines.append("6. Consider RF jamming (legal use only, check regulations)")
+
+        elif threat_type == 'WAR_DRIVING':
+            lines.append("**🚗 War Driving Detection Response:**")
+            lines.append("1. Note vehicle description if visible (make, model, color)")
+            lines.append("2. Review timestamp to identify peak activity times")
+            lines.append("3. Enable WPA3 if not already active")
+            lines.append("4. Disable SSID broadcast temporarily")
+            lines.append("5. Check for weak authentication methods (WEP, WPA)")
+            lines.append("6. Increase Wi-Fi encryption key complexity")
+            lines.append("7. Report to local authorities if repeated patterns")
+
+        elif threat_type == 'ROGUE_AP':
+            lines.append("**📡 Rogue Access Point Response:**")
+            lines.append("1. **URGENT**: Warn users NOT to connect to unknown networks")
+            lines.append("2. Perform physical sweep for unauthorized equipment")
+            lines.append("3. Check SSID - may mimic your legitimate network name")
+            lines.append("4. Disconnect from network if device matched legitimate SSID")
+            lines.append("5. Enable 802.1X authentication if not already active")
+            lines.append("6. Report to network administrator immediately")
+            lines.append("7. Consider MAC filtering as temporary measure")
+
+        elif threat_type == 'PACKET_SNIFFER':
+            lines.append("**👁️ Packet Sniffer Detection Response:**")
+            lines.append("1. Ensure all traffic uses end-to-end encryption (HTTPS, VPN)")
+            lines.append("2. Review sensitive data transmitted during timeframe")
+            lines.append("3. Rotate passwords if unencrypted traffic suspected")
+            lines.append("4. Enable VPN for all wireless traffic")
+            lines.append("5. Physical sweep for hidden monitoring devices")
+            lines.append("6. Check for compromised network equipment")
+
+        elif threat_type == 'STALKING':
+            lines.append("**🎯 Stalking Pattern Response:**")
+            lines.append("1. **URGENT**: Document all appearances with timestamps and locations")
+            lines.append("2. Review physical surroundings at each detection point")
+            lines.append("3. Vary your routines and routes")
+            lines.append("4. Report to local law enforcement with evidence")
+            lines.append("5. Consider restraining order if identity known")
+            lines.append("6. Inform workplace/home security of situation")
+            lines.append("7. Enable location services sparingly to avoid tracking")
+
+        elif threat_type == 'WALK_BY_ATTACK':
+            lines.append("**🚶 Walk-By Attack Response:**")
+            lines.append("1. Review security footage for the timeframe")
+            lines.append("2. Note pedestrians lingering near premises")
+            lines.append("3. Increase physical security awareness")
+            lines.append("4. Disable auto-connect to open networks")
+            lines.append("5. Ensure Bluetooth/Wi-Fi disabled when not needed")
+            lines.append("6. Consider motion-activated security cameras")
+
+        elif threat_type == 'PENETRATION_TEST':
+            lines.append("**🔍 Penetration Test / Active Scan Response:**")
+            lines.append("1. Verify if authorized security testing is scheduled")
+            lines.append("2. Contact IT/security team to confirm legitimacy")
+            lines.append("3. If unauthorized, treat as active attack")
+            lines.append("4. Enable intrusion detection/prevention systems")
+            lines.append("5. Review firewall logs for scanning patterns")
+            lines.append("6. Document scan signatures for future reference")
+            lines.append("7. Report to incident response team if corporate environment")
+
+        else:  # UNKNOWN
+            lines.append("**❓ Unknown Threat Type Response:**")
+            lines.append("1. Review pattern details to understand behavior")
+            lines.append("2. Monitor for recurrence to identify pattern")
+            lines.append("3. Document thoroughly for pattern analysis")
+            lines.append("4. Consider manual threat type classification")
+
+        lines.append("")
+
+        # Threat level recommendations
         if threat_level == 'HIGH':
-            lines.append("**⚠️ HIGH THREAT - Immediate Action Recommended:**")
-            lines.append("1. Document this detection with screenshots")
-            lines.append("2. Note the exact time and location")
-            lines.append("3. Look for physical drones in the area")
-            lines.append("4. Consider reporting to local authorities if pattern continues")
-            lines.append("5. Review security camera footage for the timeframe")
+            lines.append("**⚠️ THREAT LEVEL: HIGH - Immediate Action Required**")
+            lines.append("- Document everything (screenshots, logs, photos)")
+            lines.append("- Report to appropriate authorities immediately")
+            lines.append("- Consider professional security consultation")
         elif threat_level == 'MEDIUM':
-            lines.append("**⚠️ MEDIUM THREAT - Monitoring Recommended:**")
-            lines.append("1. Continue monitoring for pattern recurrence")
-            lines.append("2. Document the detection for future reference")
-            lines.append("3. Check if device appears in future sessions")
-            lines.append("4. Review physical surroundings during detection time")
+            lines.append("**⚠️ THREAT LEVEL: MEDIUM - Active Monitoring Required**")
+            lines.append("- Increase monitoring frequency")
+            lines.append("- Document for pattern analysis")
+            lines.append("- Prepare escalation plan if recurs")
         else:
-            lines.append("**ℹ️ LOW THREAT - Awareness Level:**")
-            lines.append("1. Keep this detection on record")
-            lines.append("2. Watch for similar patterns in future")
-            lines.append("3. May be a legitimate device with unusual behavior")
+            lines.append("**ℹ️ THREAT LEVEL: LOW - Awareness Recommended**")
+            lines.append("- Keep on record for reference")
+            lines.append("- May be false positive or benign activity")
 
         lines.append("")
         lines.append("**General Actions:**")
-        lines.append("- Add to watchlist if concerned: `/watchlist add " + detection.mac + "`")
-        lines.append("- Add to ignore list if false positive: add to `ignore_lists/mac_list.txt`")
-        lines.append("- Export KML file for GPS visualization in Google Earth")
+        lines.append("- Add to watchlist: `/watchlist add " + detection.mac + "`")
+        lines.append("- Ignore if false positive: add to `ignore_lists/mac_list.txt`")
+        lines.append("- Export KML for Google Earth visualization")
+        lines.append("- Share report with security team if in corporate environment")
 
         lines.append("")
         return '\n'.join(lines)
@@ -416,22 +519,32 @@ class BehavioralReportGenerator:
         threat_level, emoji, _ = self.determine_threat_level(detection.confidence)
         detection.threat_level = threat_level
 
+        # Get threat type information
+        threat_type = detection.threat_type or 'UNKNOWN'
+        type_emoji, type_description = self.get_threat_type_info(threat_type)
+
         lines = []
 
         # Header
-        lines.append(f"# {emoji} Behavioral Drone Detection Report\n")
+        lines.append(f"# {emoji} Behavioral Threat Detection Report\n")
         lines.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append(f"**Detection Time:** {datetime.fromtimestamp(detection.timestamp).strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append(f"**Threat Level:** {emoji} **{threat_level}**")
+        lines.append(f"**Threat Type:** {type_emoji} **{type_description}**")
+        if detection.threat_type_confidence:
+            lines.append(f"**Classification Confidence:** {detection.threat_type_confidence:.1%}")
         lines.append("")
 
         # Executive Summary
         lines.append("## 📋 Executive Summary\n")
-        lines.append("This report details a potential drone detection based on behavioral pattern analysis. "
-                    "The system analyzed wireless device behavior and assigned a confidence score based on "
-                    "suspicious patterns.")
+        lines.append(f"This report details a **{type_description}** detection based on behavioral pattern analysis. "
+                    f"The system analyzed wireless device behavior and identified suspicious patterns consistent "
+                    f"with {type_description.lower()} activity.")
         lines.append("")
-        lines.append(f"**Confidence Score:** {detection.confidence:.1%}")
+        if detection.threat_type_reasoning:
+            lines.append(f"**Classification Reasoning:** {detection.threat_type_reasoning}")
+            lines.append("")
+        lines.append(f"**Overall Confidence Score:** {detection.confidence:.1%}")
         lines.append("")
         lines.append(self.generate_confidence_bar(detection.confidence))
         lines.append("")
@@ -534,6 +647,15 @@ if __name__ == "__main__":
     print(f"  Patterns Detected: {sum(1 for p in patterns.values() if p.get('detected', False))}/9")
     print()
 
+    # Classify threat type
+    threat_type, type_confidence, type_reasoning = detector.classify_threat_type(test_mac, confidence, patterns)
+
+    print(f"Threat Classification:")
+    print(f"  Type: {threat_type}")
+    print(f"  Classification Confidence: {type_confidence:.1%}")
+    print(f"  Reasoning: {type_reasoning}")
+    print()
+
     # Create detection object
     detection = BehavioralDetection(
         mac=test_mac,
@@ -541,7 +663,10 @@ if __name__ == "__main__":
         confidence=confidence,
         patterns=patterns,
         device_history=detector.device_history[test_mac],
-        oui_manufacturer="Unknown (Test)"
+        oui_manufacturer="Unknown (Test)",
+        threat_type=threat_type,
+        threat_type_confidence=type_confidence,
+        threat_type_reasoning=type_reasoning
     )
 
     # Generate report

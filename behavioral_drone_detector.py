@@ -392,6 +392,94 @@ class BehavioralDroneDetector:
 
         return (confidence, patterns)
 
+    def classify_threat_type(self, mac: str, confidence: float, patterns: Dict[str, Any]) -> Tuple[str, float, str]:
+        """
+        Classify the type of threat based on behavioral patterns.
+
+        Analyzes pattern combinations to identify likely threat types:
+        - DRONE: Aerial vehicle with high mobility and altitude changes
+        - WAR_DRIVING: Mobile reconnaissance from vehicle
+        - ROGUE_AP: Malicious stationary access point
+        - PACKET_SNIFFER: Passive monitoring device
+        - STALKING: Mobile device following target
+        - WALK_BY_ATTACK: Brief proximity attack
+        - PENETRATION_TEST: Active security testing
+        - UNKNOWN: Suspicious but unclear threat type
+
+        Args:
+            mac: Device MAC address
+            confidence: Overall confidence score
+            patterns: Pattern detection results
+
+        Returns:
+            Tuple of (threat_type, type_confidence, reasoning)
+        """
+        if mac not in self.device_history:
+            return ('UNKNOWN', 0.0, 'Insufficient device history')
+
+        history = self.device_history[mac]
+        speed = self.calculate_movement_speed(mac)
+
+        # Drone signature: Aerial vehicle with altitude changes
+        # High mobility + signal variance + no association + high speed
+        if (patterns.get('high_mobility', {}).get('detected') and
+            patterns.get('signal_variance', {}).get('detected') and
+            patterns.get('no_association', {}).get('detected') and
+            speed > 15):  # >15 m/s = >54 km/h (faster than normal vehicle in city)
+            return ('DRONE', 0.90, 'Aerial vehicle movement pattern with altitude changes')
+
+        # War driving signature: Vehicle-speed reconnaissance
+        # High mobility + channel hopping + probe frequency + vehicle speed
+        if (patterns.get('high_mobility', {}).get('detected') and
+            patterns.get('channel_hopping', {}).get('detected') and
+            patterns.get('probe_frequency', {}).get('detected') and
+            5 < speed <= 25):  # 18-90 km/h = typical vehicle speed in city
+            return ('WAR_DRIVING', 0.85, 'Mobile reconnaissance at vehicle speed')
+
+        # Rogue AP signature: Stationary malicious access point
+        # Hovering + high signal + no association + no clients (initially)
+        if (patterns.get('hovering', {}).get('detected') and
+            patterns.get('high_signal', {}).get('detected') and
+            patterns.get('no_association', {}).get('detected') and
+            speed < 1):  # Stationary
+            return ('ROGUE_AP', 0.80, 'Stationary device with strong signal, likely fake AP')
+
+        # Packet sniffer signature: Passive monitoring
+        # No association + no clients + channel hopping + stationary
+        if (patterns.get('no_association', {}).get('detected') and
+            patterns.get('no_clients', {}).get('detected') and
+            patterns.get('channel_hopping', {}).get('detected') and
+            speed < 2):  # Mostly stationary
+            return ('PACKET_SNIFFER', 0.75, 'Passive monitoring device scanning channels')
+
+        # Stalking signature: Following pattern
+        # High mobility + hovering + signal variance + multiple locations
+        if (patterns.get('high_mobility', {}).get('detected') and
+            patterns.get('hovering', {}).get('detected') and
+            patterns.get('signal_variance', {}).get('detected') and
+            len(history.locations) > 3 and
+            1 < speed < 10):  # Pedestrian to slow vehicle speed
+            return ('STALKING', 0.70, 'Device following movement pattern across locations')
+
+        # Walk-by attack signature: Brief high-signal appearance
+        # Brief appearance + high signal + probe frequency + pedestrian speed
+        if (patterns.get('brief_appearance', {}).get('detected') and
+            patterns.get('high_signal', {}).get('detected') and
+            patterns.get('probe_frequency', {}).get('detected') and
+            1 < speed < 5):  # Pedestrian speed: 3.6-18 km/h
+            return ('WALK_BY_ATTACK', 0.65, 'Brief proximity attack at pedestrian speed')
+
+        # Penetration test signature: Active reconnaissance
+        # Probe frequency + channel hopping + no association
+        if (patterns.get('probe_frequency', {}).get('detected') and
+            patterns.get('channel_hopping', {}).get('detected') and
+            patterns.get('no_association', {}).get('detected')):
+            return ('PENETRATION_TEST', 0.60, 'Active network reconnaissance and scanning')
+
+        # Default: Unknown threat type but suspicious behavior
+        detected_count = sum(1 for p in patterns.values() if p.get('detected', False))
+        return ('UNKNOWN', confidence * 0.5, f'Suspicious behavior detected ({detected_count}/9 patterns) but unclear threat type')
+
     def _haversine_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         """
         Calculate distance between two GPS coordinates using Haversine formula.
