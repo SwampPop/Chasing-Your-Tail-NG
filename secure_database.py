@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 import time
-from typing import List, Dict, Optional, Any, Set
+from typing import List, Dict, Optional, Any, Set, Tuple
 from cyt_constants import SystemConstants
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class SecureKismetDB:
             raise
 
     # Helper method to consolidate JSON parsing logic
-    def _parse_device_row(self, row: sqlite3.Row) -> dict[str, Any]:
+    def _parse_device_row(self, row: sqlite3.Row) -> Dict[str, Any]:
         """Safely parses the JSON from a device row."""
         try:
             device_data = None
@@ -88,7 +88,7 @@ class SecureKismetDB:
 
     def get_devices_by_time_range(
             self, start_time: float,
-            end_time: float | None = None) -> list[dict[str, Any]]:
+            end_time: Optional[float] = None) -> List[Dict[str, Any]]:
         """
         Get devices within time range with proper parameterization.
         UPDATED: Now fetches GPS coordinates.
@@ -192,7 +192,7 @@ class SecureKismetDB:
         return self.execute_safe_query(query, params)
 
     def check_watchlist_macs_secure(
-            self, mac_list: list[str],
+            self, mac_list: List[str],
             time_window_seconds: int) -> List[str]:
         """Securely check for watchlist MACs seen recently."""
         if not mac_list:
@@ -219,7 +219,7 @@ class SecureKismetDB:
 class SecureTimeWindows:
     """Secure time window management for device tracking"""
 
-    def __init__(self, config: dict[str, Any] | None):
+    def __init__(self, config: Optional[Dict[str, Any]]):
         self.config = config
         self.time_windows = config.get('timing', {}).get('time_windows', {
             'recent': 5,
