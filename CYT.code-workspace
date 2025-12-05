@@ -1,0 +1,39 @@
+{
+    "folders": [
+        {
+            "name": "CYT - Chasing Your Tail NG",
+            "path": "."
+        }
+    ],
+    "settings": {
+        // Workspace-specific settings (override .vscode/settings.json if needed)
+        "files.autoSave": "afterDelay",
+        "files.autoSaveDelay": 1000,
+
+        // Explorer organization
+        "explorer.sortOrder": "type",
+        "explorer.compactFolders": false,
+
+        // Breadcrumbs
+        "breadcrumbs.enabled": true,
+
+        // Minimap
+        "editor.minimap.enabled": true,
+        "editor.minimap.maxColumn": 120
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-python.python",
+            "ms-python.vscode-pylance",
+            "eamodio.gitlens",
+            "yzhang.markdown-all-in-one",
+            "alexcvzz.vscode-sqlite",
+            "timonwong.shellcheck"
+        ]
+    },
+    "launch": {
+        "version": "0.2.0",
+        "configurations": [],
+        "compounds": []
+    }
+}

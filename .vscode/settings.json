@@ -1,0 +1,69 @@
+{
+    // Python Configuration
+    "python.defaultInterpreterPath": "/usr/bin/python3",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.diagnosticMode": "workspace",
+
+    // Linting
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.linting.flake8Args": [
+        "--max-line-length=120",
+        "--ignore=E501,W503,E203"
+    ],
+
+    // Formatting
+    "python.formatting.provider": "autopep8",
+    "python.formatting.autopep8Args": [
+        "--max-line-length=120"
+    ],
+    "editor.formatOnSave": false,
+
+    // Testing
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+
+    // Editor
+    "editor.rulers": [120],
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+
+    // File Associations
+    "files.associations": {
+        "*.sh": "shellscript",
+        "*.service": "ini",
+        "*.conf": "properties"
+    },
+
+    // Exclude from Explorer
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.DS_Store": true,
+        "**/cyt_history.db": false,
+        "**/logs/*.log": false
+    },
+
+    // Search Exclude
+    "search.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/logs/*.log": true,
+        "**/surveillance_reports/**": true,
+        "**/kml_files/**": true
+    },
+
+    // Git
+    "git.ignoreLimitWarning": true,
+
+    // Terminal
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "terminal.integrated.scrollback": 10000
+}
