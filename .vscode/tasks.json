@@ -1,0 +1,91 @@
+{
+    // VS Code Tasks for CYT
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CYT: Start Daemon",
+            "type": "shell",
+            "command": "sudo python3 cyt_daemon.py start",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "CYT: Stop Daemon",
+            "type": "shell",
+            "command": "sudo python3 cyt_daemon.py stop",
+            "problemMatcher": []
+        },
+        {
+            "label": "CYT: Daemon Status",
+            "type": "shell",
+            "command": "python3 cyt_daemon.py status",
+            "problemMatcher": []
+        },
+        {
+            "label": "CYT: Validate Config",
+            "type": "shell",
+            "command": "python3 config_validator.py",
+            "problemMatcher": []
+        },
+        {
+            "label": "CYT: Run Tests",
+            "type": "shell",
+            "command": "pytest -v tests/",
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "CYT: Tail Monitor Log",
+            "type": "shell",
+            "command": "tail -f logs/cyt_monitor.log",
+            "problemMatcher": [],
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "CYT: Tail Health Log",
+            "type": "shell",
+            "command": "tail -f logs/kismet_health.log",
+            "problemMatcher": [],
+            "isBackground": true
+        },
+        {
+            "label": "Git: Push to Remote",
+            "type": "shell",
+            "command": "git push origin main",
+            "problemMatcher": []
+        },
+        {
+            "label": "Install Python Dependencies",
+            "type": "shell",
+            "command": "pip3 install -r requirements.txt",
+            "problemMatcher": []
+        },
+        {
+            "label": "Kismet: Start Monitor Mode",
+            "type": "shell",
+            "command": "sudo airmon-ng start wlan0",
+            "problemMatcher": []
+        },
+        {
+            "label": "Kismet: Start Server",
+            "type": "shell",
+            "command": "sudo ./start_kismet_clean.sh wlan0mon",
+            "problemMatcher": [],
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        }
+    ]
+}

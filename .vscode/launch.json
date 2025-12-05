@@ -1,0 +1,99 @@
+{
+    // VS Code Debug Configurations for CYT
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "CYT: Main Monitor",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/chasing_your_tail.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "CYT: Surveillance Analyzer",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/surveillance_analyzer.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": []
+        },
+        {
+            "name": "CYT: Surveillance Analyzer (Demo)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/surveillance_analyzer.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["--demo"]
+        },
+        {
+            "name": "CYT: Behavioral Detector (Test)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/behavioral_drone_detector.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "CYT: Health Monitor (Standalone)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/kismet_health_monitor.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "CYT: API Server",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/api_server.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "FLASK_ENV": "development",
+                "FLASK_DEBUG": "1"
+            }
+        },
+        {
+            "name": "CYT: Config Validator",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/config_validator.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "CYT: GUI (Kivy)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/cyt_gui.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: Debug Tests",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "-v",
+                "${workspaceFolder}/tests"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}

@@ -1,0 +1,35 @@
+{
+    // Recommended VS Code Extensions for CYT Development
+    "recommendations": [
+        // Python
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+
+        // Git
+        "eamodio.gitlens",
+        "github.vscode-pull-request-github",
+
+        // Markdown
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint",
+
+        // Shell Script
+        "timonwong.shellcheck",
+        "foxundermoon.shell-format",
+
+        // JSON
+        "zainchen.json",
+
+        // SQLite
+        "alexcvzz.vscode-sqlite",
+
+        // File Icons
+        "vscode-icons-team.vscode-icons",
+
+        // Utilities
+        "streetsidesoftware.code-spell-checker",
+        "visualstudioexptteam.vscodeintellicode",
+        "ms-vscode-remote.remote-ssh"
+    ]
+}
