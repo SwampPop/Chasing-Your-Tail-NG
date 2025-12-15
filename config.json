@@ -1,7 +1,7 @@
 {
   "paths": {
     "log_dir": "logs",
-    "kismet_logs": ".",
+    "kismet_logs": "/Users/thomaslavoie/my_projects",
     "ignore_lists": {
       "mac": "mac_ignore.json",
       "ssid": "ssid_ignore.json"
