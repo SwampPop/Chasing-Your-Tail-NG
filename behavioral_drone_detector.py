@@ -19,6 +19,9 @@ import math
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of data points to keep per device to prevent memory exhaustion
+MAX_HISTORY_POINTS = 1000
+
 
 @dataclass
 class DeviceHistory:
@@ -119,6 +122,15 @@ class BehavioralDroneDetector:
                 history.channels.append(channel)
 
             history.probe_count += 1
+
+            # Limit history size to prevent memory leaks
+            if len(history.appearances) > MAX_HISTORY_POINTS:
+                history.appearances = history.appearances[-MAX_HISTORY_POINTS:]
+                history.signal_strengths = history.signal_strengths[-MAX_HISTORY_POINTS:]
+                if len(history.locations) > MAX_HISTORY_POINTS:
+                    history.locations = history.locations[-MAX_HISTORY_POINTS:]
+                if len(history.channels) > MAX_HISTORY_POINTS:
+                    history.channels = history.channels[-MAX_HISTORY_POINTS:]
 
             # Check for associations/clients from device_data
             if device_data.get('type') == 'ap':

@@ -1,0 +1,16 @@
+{
+  "drone_ouis": {
+    "60:60:1F": "DJI Technology",
+    "34:D2:62": "DJI Technology",
+    "40:6C:8F": "DJI Technology",
+    "58:6B:14": "DJI Technology",
+    "E4:0F:53": "DJI Technology",
+    "90:03:B7": "Parrot SA",
+    "A0:14:3D": "Parrot SA",
+    "00:12:1C": "Parrot SA",
+    "00:1C:27": "Autel Robotics",
+    "D8:3A:DD": "Skydio",
+    "E0:B6:F5": "Yuneec",
+    "F4:DD:9E": "GoPro (Karma)"
+  }
+}
