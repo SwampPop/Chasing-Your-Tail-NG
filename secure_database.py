@@ -34,6 +34,10 @@ class SecureKismetDB:
             self._connection = sqlite3.connect(
                 uri_path, uri=True, timeout=SystemConstants.DB_CONNECTION_TIMEOUT)
             self._connection.row_factory = sqlite3.Row  # Enable column access by name
+            
+            # Enable Write-Ahead Logging (WAL) for better concurrency
+            self._connection.execute("PRAGMA journal_mode=WAL;")
+            
             logger.info(f"Connected to database: {self.db_path}")
         except sqlite3.Error as e:
             logger.error(f"Failed to connect to database {self.db_path}: {e}")

@@ -287,10 +287,18 @@ class KismetHealthMonitor:
         try:
             logger.warning(f"Attempting to restart Kismet (attempt {self.restart_count + 1})")
 
-            # Kill existing Kismet processes
-            logger.info("Killing existing Kismet processes...")
-            subprocess.run(['sudo', 'pkill', '-9', 'kismet'], timeout=5)
-            time.sleep(2)  # Wait for processes to die
+            # Try graceful shutdown first
+            logger.info("Sending SIGTERM to Kismet processes...")
+            subprocess.run(['sudo', 'pkill', '-15', 'kismet'], timeout=5)
+            time.sleep(5)
+
+            # Check if still running, then force kill
+            if self.check_process_running():
+                logger.warning("Kismet did not exit gracefully, forcing SIGKILL...")
+                subprocess.run(['sudo', 'pkill', '-9', 'kismet'], timeout=5)
+                time.sleep(2)  # Wait for processes to die
+            else:
+                logger.info("Kismet stopped gracefully.")
 
             # Start Kismet using startup script
             if not os.path.exists(self.startup_script):

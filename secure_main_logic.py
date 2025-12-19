@@ -6,6 +6,8 @@ and immediate threat alerting (Drones).
 import logging
 import sqlite3
 import time
+import json
+import os
 from datetime import datetime
 from typing import List, Set, Dict, Any, Optional
 from secure_database import SecureKismetDB, SecureTimeWindows
@@ -28,22 +30,6 @@ YELLOW = "\033[93m"
 GREEN = "\033[92m"
 RESET = "\033[0m"
 
-# Known Drone Manufacturer OUIs
-DRONE_OUIS = {
-    "60:60:1F": "DJI Technology",
-    "34:D2:62": "DJI Technology",
-    "40:6C:8F": "DJI Technology",
-    "58:6B:14": "DJI Technology",
-    "E4:0F:53": "DJI Technology",
-    "90:03:B7": "Parrot SA",
-    "A0:14:3D": "Parrot SA",
-    "00:12:1C": "Parrot SA",
-    "00:1C:27": "Autel Robotics",
-    "D8:3A:DD": "Skydio",
-    "E0:B6:F5": "Yuneec",
-    "F4:DD:9E": "GoPro (Karma)",
-}
-
 
 class SecureCYTMonitor:
     """Secure monitoring logic for CYT"""
@@ -57,6 +43,9 @@ class SecureCYTMonitor:
         self.ssid_ignore_list = set(ssid_ignore_list)
         self.log_file = log_file
         self.time_manager = SecureTimeWindows(config)
+
+        # Load Threat Intelligence
+        self.drone_ouis = self.load_threat_intel()
 
         # Alert Manager integration (optional but recommended)
         self.alert_manager = alert_manager
@@ -97,6 +86,23 @@ class SecureCYTMonitor:
             self.behavioral_report_generator = None
             logger.info("Behavioral drone detection disabled")
 
+    def load_threat_intel(self) -> Dict[str, str]:
+        """Load threat intelligence from JSON file"""
+        try:
+            file_path = "threat_intel.json"
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                    ouis = data.get("drone_ouis", {})
+                    logger.info(f"Loaded {len(ouis)} drone signatures from threat_intel.json")
+                    return ouis
+            else:
+                logger.warning("threat_intel.json not found, drone OUI detection disabled")
+                return {}
+        except Exception as e:
+            logger.error(f"Failed to load threat intelligence: {e}")
+            return {}
+
     def _log_to_console(self, message: str) -> None:
         """Writes to stdout and the log file if available"""
         # Print to screen (with colors if applicable)
@@ -114,7 +120,7 @@ class SecureCYTMonitor:
         """Fast lookup for drone manufacturers"""
         try:
             prefix = mac.upper()[:8]
-            return DRONE_OUIS.get(prefix)
+            return self.drone_ouis.get(prefix)
         except Exception:
             return None
 

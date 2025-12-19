@@ -1,37 +1,16 @@
 [Unit]
-Description=Chasing Your Tail - Wireless Surveillance Detection System
-Documentation=https://github.com/SwampPop/Chasing-Your-Tail-NG
+Description=Chasing Your Tail - Wireless Surveillance Detection
 After=network.target
 
 [Service]
-Type=forking
+Type=simple
 User=root
-Group=root
-WorkingDirectory=/opt/cyt
-ExecStart=/usr/bin/python3 /opt/cyt/cyt_daemon.py start
-ExecStop=/usr/bin/python3 /opt/cyt/cyt_daemon.py stop
-ExecReload=/usr/bin/python3 /opt/cyt/cyt_daemon.py restart
-PIDFile=/opt/cyt/run/cyt_monitor.pid
-Restart=on-failure
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=cyt
-
-# Environment
-Environment="PYTHONUNBUFFERED=1"
-Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-# Security hardening
-NoNewPrivileges=false
-PrivateTmp=true
-ProtectSystem=strict
-ReadWritePaths=/opt/cyt/logs /opt/cyt/run /opt/cyt/surveillance_reports /opt/cyt/kml_files
-
-# Resource limits
-LimitNOFILE=65536
-TimeoutStartSec=60
-TimeoutStopSec=30
+WorkingDirectory=/media/psf/my_projects/0_active_projects/Chasing-Your-Tail-NG
+ExecStart=/usr/bin/python3 cyt_daemon.py start
+ExecStop=/usr/bin/python3 cyt_daemon.py stop
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
