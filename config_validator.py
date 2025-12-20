@@ -31,8 +31,12 @@ CONFIG_SCHEMA = {
                     "description": "Path pattern to Kismet database files"
                 },
                 "ignore_lists": {
-                    "type": "string",
-                    "description": "Directory containing ignore list files"
+                    "type": "object",
+                    "description": "Ignore list file paths",
+                    "properties": {
+                        "mac": {"type": "string"},
+                        "ssid": {"type": "string"}
+                    }
                 },
                 "log_directory": {
                     "type": "string",
