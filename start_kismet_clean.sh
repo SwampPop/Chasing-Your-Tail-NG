@@ -13,13 +13,15 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$DIR"
 
 # --- GET INTERFACE FROM ARGUMENT (ADDED) ---
-# Use the first command-line argument as the interface, or default to 'wlan1'.
-INTERFACE=${1:-wlan1}
+# Use the first command-line argument as the interface, or default to 'wlan0'.
+INTERFACE=${1:-wlan0}
 echo "Starting Kismet on interface: $INTERFACE"
 
 # Start Kismet directly
 # Note: We don't need 'sudo' here because we already checked for root.
-/usr/local/bin/kismet -c "$INTERFACE" --daemonize
+# Change to the log directory so Kismet writes its files there
+cd "$DIR/logs/kismet/"
+/usr/bin/kismet -c "$INTERFACE" --daemonize
 
 # --- INTELLIGENT WAIT (CHANGED) ---
 # Loop for up to 10 seconds, checking every second for the Kismet process.

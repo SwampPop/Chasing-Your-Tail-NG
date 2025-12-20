@@ -3,8 +3,8 @@
     "log_dir": "logs",
     "kismet_logs": "logs/kismet",
     "ignore_lists": {
-      "mac": "mac_ignore.json",
-      "ssid": "ssid_ignore.json"
+      "mac": "mac_list.txt",
+      "ssid": "ssid_list.txt"
     }
   },
   "api_keys": {
@@ -33,7 +33,7 @@
     "auto_restart": true,
     "max_restart_attempts": 3,
     "startup_script": "./start_kismet_clean.sh",
-    "interface": "wlan0mon"
+    "interface": "wlan0"
   },
   "behavioral_drone_detection": {
     "enabled": true,
