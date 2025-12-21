@@ -14,6 +14,10 @@ logging.basicConfig(level=logging.INFO,
 def find_latest_kismet_db(path_pattern: str) -> str:
     """Finds the most recently modified file matching a glob pattern."""
     try:
+        # Check if it's a directory or a file pattern
+        if os.path.isdir(path_pattern):
+            path_pattern = os.path.join(path_pattern, "*.kismet")
+
         list_of_files = glob.glob(path_pattern)
         if not list_of_files:
             raise FileNotFoundError(
