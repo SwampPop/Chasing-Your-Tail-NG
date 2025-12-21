@@ -123,17 +123,18 @@ class CYTApp(App):
                 config = json.load(f)
             kismet_log_path_pattern = config['paths']['kismet_logs']
             expanded_path = os.path.expanduser(kismet_log_path_pattern)
-            if "*" in expanded_path:
-                list_of_files = glob.glob(expanded_path)
-                if not list_of_files:
-                    raise FileNotFoundError(
-                        "No Kismet files found matching pattern: "
-                        f"{kismet_log_path_pattern}")
-                self.DB_PATH = max(list_of_files, key=os.path.getctime)
-                logging.info(f"Using latest Kismet DB: {self.DB_PATH}")
-            else:
-                self.DB_PATH = expanded_path
-                logging.info(f"Using direct Kismet DB path: {self.DB_PATH}")
+
+            # Check if it's a directory or a file pattern
+            if os.path.isdir(expanded_path):
+                expanded_path = os.path.join(expanded_path, "*.kismet")
+
+            list_of_files = glob.glob(expanded_path)
+            if not list_of_files:
+                raise FileNotFoundError(
+                    "No Kismet files found matching pattern: "
+                    f"{kismet_log_path_pattern}")
+            self.DB_PATH = max(list_of_files, key=os.path.getctime)
+            logging.info(f"Using latest Kismet DB: {self.DB_PATH}")
             self.TIME_WINDOW = config['timing']['time_windows']['recent'] * 60
             check_interval = config['timing']['check_interval']
             self.INTERVAL_FOLLOWERS = check_interval
