@@ -75,21 +75,22 @@ def get_wifi_aps(db_path):
     with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT devmac, type, last_signal, packets,
+            SELECT devmac, type, strongest_signal, bytes_data,
                    datetime(first_time, 'unixepoch') as first_seen,
                    datetime(last_time, 'unixepoch') as last_seen
             FROM devices
             WHERE type = 'Wi-Fi AP'
-            ORDER BY last_signal DESC
+            ORDER BY strongest_signal DESC
             LIMIT 50
         """)
 
-        print(f"{'MAC Address':<20} {'Signal':<10} {'Packets':<10} {'First Seen':<20} {'Last Seen':<20}")
-        print("-" * 100)
+        print(f"{'MAC Address':<20} {'Signal':<10} {'Data (KB)':<12} {'First Seen':<20} {'Last Seen':<20}")
+        print("-" * 105)
 
         for row in cursor.fetchall():
-            mac, dtype, signal, packets, first_seen, last_seen = row
+            mac, dtype, signal, bytes_data, first_seen, last_seen = row
             signal_str = f"{signal} dBm" if signal else "Unknown"
+            data_kb = f"{bytes_data//1024}" if bytes_data else "0"
 
             # Categorization hint
             if signal and signal > -50:
@@ -99,7 +100,7 @@ def get_wifi_aps(db_path):
             else:
                 hint = "← FAR AWAY"
 
-            print(f"{mac:<20} {signal_str:<10} {packets:<10} {first_seen:<20} {last_seen:<20} {hint}")
+            print(f"{mac:<20} {signal_str:<10} {data_kb:<12} {first_seen:<20} {last_seen:<20} {hint}")
 
 def get_wifi_clients(db_path):
     """Get WiFi client devices (phones, laptops, etc.)"""
@@ -111,33 +112,33 @@ def get_wifi_clients(db_path):
     with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT devmac, min_signal, max_signal, packets,
+            SELECT devmac, strongest_signal, bytes_data,
                    datetime(first_time, 'unixepoch') as first_seen,
                    datetime(last_time, 'unixepoch') as last_seen
             FROM devices
-            WHERE type = 'Wi-Fi Device'
+            WHERE type IN ('Wi-Fi Device', 'Wi-Fi Client')
             ORDER BY last_time DESC
             LIMIT 50
         """)
 
-        print(f"{'MAC Address':<20} {'Signal Range':<20} {'Packets':<10} {'First Seen':<20} {'Last Seen':<20}")
-        print("-" * 110)
+        print(f"{'MAC Address':<20} {'Signal':<15} {'Data (KB)':<12} {'First Seen':<20} {'Last Seen':<20}")
+        print("-" * 105)
 
         for row in cursor.fetchall():
-            mac, min_sig, max_sig, packets, first_seen, last_seen = row
+            mac, signal, bytes_data, first_seen, last_seen = row
 
-            if min_sig and max_sig:
-                signal_str = f"{min_sig} to {max_sig} dBm"
-                # Variable signal = mobile device
-                if abs(max_sig - min_sig) > 20:
-                    hint = "← MOBILE (signal varies)"
-                else:
-                    hint = "← STATIC (consistent signal)"
+            signal_str = f"{signal} dBm" if signal else "Unknown"
+            data_kb = f"{bytes_data//1024}" if bytes_data else "0"
+
+            # Hint based on signal strength
+            if signal and signal > -50:
+                hint = "← VERY CLOSE"
+            elif signal and signal > -70:
+                hint = "← NEARBY"
             else:
-                signal_str = "Unknown"
-                hint = ""
+                hint = "← FAR AWAY"
 
-            print(f"{mac:<20} {signal_str:<20} {packets:<10} {first_seen:<20} {last_seen:<20} {hint}")
+            print(f"{mac:<20} {signal_str:<15} {data_kb:<12} {first_seen:<20} {last_seen:<20} {hint}")
 
 def get_bluetooth_devices(db_path):
     """Get Bluetooth devices"""
@@ -149,7 +150,7 @@ def get_bluetooth_devices(db_path):
     with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT devmac, type, packets,
+            SELECT devmac, type, bytes_data,
                    datetime(first_time, 'unixepoch') as first_seen,
                    datetime(last_time, 'unixepoch') as last_seen
             FROM devices
@@ -165,12 +166,13 @@ def get_bluetooth_devices(db_path):
             print("  (Kismet may need Bluetooth capture enabled)")
             return
 
-        print(f"{'MAC Address':<20} {'Type':<15} {'Packets':<10} {'First Seen':<20} {'Last Seen':<20}")
-        print("-" * 100)
+        print(f"{'MAC Address':<20} {'Type':<15} {'Data (KB)':<12} {'First Seen':<20} {'Last Seen':<20}")
+        print("-" * 105)
 
         for row in rows:
-            mac, dtype, packets, first_seen, last_seen = row
-            print(f"{mac:<20} {dtype:<15} {packets:<10} {first_seen:<20} {last_seen:<20}")
+            mac, dtype, bytes_data, first_seen, last_seen = row
+            data_kb = f"{bytes_data//1024}" if bytes_data else "0"
+            print(f"{mac:<20} {dtype:<15} {data_kb:<12} {first_seen:<20} {last_seen:<20}")
 
 def investigate_specific_device(db_path, mac):
     """Deep dive into a specific device"""
@@ -182,7 +184,7 @@ def investigate_specific_device(db_path, mac):
         cursor = conn.cursor()
         cursor.execute("""
             SELECT devmac, type, phyname,
-                   min_signal, max_signal, packets,
+                   strongest_signal, bytes_data,
                    datetime(first_time, 'unixepoch') as first_seen,
                    datetime(last_time, 'unixepoch') as last_seen,
                    min_lat, min_lon, max_lat, max_lon
@@ -196,7 +198,7 @@ def investigate_specific_device(db_path, mac):
             print(f"  Device {mac} not found in database")
             return
 
-        devmac, dtype, phyname, min_sig, max_sig, packets, first_seen, last_seen, min_lat, min_lon, max_lat, max_lon = row
+        devmac, dtype, phyname, signal, bytes_data, first_seen, last_seen, min_lat, min_lon, max_lat, max_lon = row
 
         print(f"\nBASIC INFO:")
         print(f"  MAC Address    : {devmac}")
@@ -204,31 +206,26 @@ def investigate_specific_device(db_path, mac):
         print(f"  PHY Type       : {phyname or 'Unknown'}")
         print(f"  First Seen     : {first_seen}")
         print(f"  Last Seen      : {last_seen}")
-        print(f"  Total Packets  : {packets}")
+        print(f"  Data Volume    : {bytes_data//1024 if bytes_data else 0} KB")
 
         print(f"\nSIGNAL ANALYSIS:")
-        if min_sig and max_sig:
-            print(f"  Signal Range   : {min_sig} to {max_sig} dBm")
-            print(f"  Signal Variance: {abs(max_sig - min_sig)} dBm")
+        if signal:
+            print(f"  Strongest Signal: {signal} dBm")
 
-            if abs(max_sig - min_sig) > 20:
-                print(f"  Assessment     : MOBILE DEVICE (signal varies significantly)")
-            else:
-                print(f"  Assessment     : STATIC DEVICE (consistent signal)")
-
-            if max_sig > -50:
+            if signal > -50:
                 print(f"  Distance       : VERY CLOSE (yours or immediate neighbor)")
-            elif max_sig > -70:
+            elif signal > -70:
                 print(f"  Distance       : NEARBY")
             else:
                 print(f"  Distance       : FAR AWAY")
         else:
-            print(f"  Signal Range   : No signal data")
+            print(f"  Signal Strength: No signal data")
 
         print(f"\nLOCATION DATA:")
         if min_lat and min_lon:
-            print(f"  GPS Coordinates: {min_lat}, {min_lon}")
+            print(f"  GPS Min Coords : {min_lat}, {min_lon}")
             if max_lat and max_lon:
+                print(f"  GPS Max Coords : {max_lat}, {max_lon}")
                 if abs(max_lat - min_lat) > 0.001 or abs(max_lon - min_lon) > 0.001:
                     print(f"  Movement       : YES (coordinates vary)")
                 else:
@@ -241,22 +238,20 @@ def investigate_specific_device(db_path, mac):
 
         if dtype == 'Wi-Fi AP':
             print(f"  Category       : Router/Access Point")
-            if max_sig and max_sig > -60:
+            if signal and signal > -60:
                 print(f"  Recommendation : ADD to ignore list (your router or neighbor's static router)")
             else:
-                print(f"  Recommendation : REVIEW - Could be mobile hotspot if signal varies")
+                print(f"  Recommendation : REVIEW - Could be mobile hotspot")
 
         elif dtype in ('Bluetooth', 'BTLE'):
             print(f"  Category       : Bluetooth Device")
             print(f"  Recommendation : CHECK if it's yours (phone, watch, car, earbuds)")
             print(f"                   If unknown: DO NOT IGNORE (could be tracker)")
 
-        elif dtype == 'Wi-Fi Device':
+        elif dtype in ('Wi-Fi Device', 'Wi-Fi Client'):
             print(f"  Category       : WiFi Client")
-            if min_sig and max_sig and abs(max_sig - min_sig) > 20:
-                print(f"  Recommendation : MOBILE - Do NOT ignore unless it's your device")
-            else:
-                print(f"  Recommendation : Could be static IoT - verify it's yours before ignoring")
+            print(f"  Recommendation : Verify if it's your device before adding to ignore list")
+            print(f"                   Unknown devices should NOT be ignored")
 
         else:
             print(f"  Category       : {dtype}")
