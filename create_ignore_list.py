@@ -5,6 +5,7 @@ import os
 import pathlib
 import logging
 from typing import Set
+from datetime import datetime
 
 # Use a logger instead of print for better feedback
 logging.basicConfig(level=logging.INFO,
@@ -77,14 +78,80 @@ def fetch_all_probed_ssids(db_path: str) -> Set[str]:
     return ssids
 
 
+def merge_with_existing_file(new_data: Set[str], output_path: pathlib.Path) -> list:
+    """
+    Merges new data with existing file, preserving comments and structure.
+    Returns list of lines to write (preserves comments from old file).
+    """
+    if not output_path.exists():
+        # No existing file, return simple list
+        return [f"{item}\n" for item in sorted(list(new_data))]
+
+    # Read existing file with comments
+    existing_lines = []
+    existing_entries = set()
+
+    with open(output_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            # Preserve all lines (including comments and blank lines)
+            existing_lines.append(line)
+
+            # Extract entry (remove comments)
+            entry = line.split('#')[0].strip()
+            if entry:
+                existing_entries.add(entry)
+
+    # Find new entries not in existing file
+    new_entries = new_data - existing_entries
+
+    if new_entries:
+        # Add section header for new entries
+        existing_lines.append("\n")
+        existing_lines.append("# ===== NEW DEVICES (REVIEW AND CATEGORIZE) =====\n")
+        existing_lines.append(f"# Added: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        existing_lines.append("# Review these entries and move them to appropriate sections above\n")
+        existing_lines.append("\n")
+
+        for entry in sorted(list(new_entries)):
+            existing_lines.append(f"{entry}\n")
+
+    return existing_lines
+
+
 def write_list_to_file(data: Set[str], output_path: pathlib.Path):
-    """Writes a set of items to a file, one item per line."""
+    """
+    Writes a set of items to a file, intelligently merging with existing content.
+    Preserves comments and structure from existing file.
+    """
     try:
-        # CHANGED: Use a 'with' statement for safer file writing.
-        with open(output_path, "w") as f:
-            for item in sorted(list(data)):
-                f.write(f"{item}\n")
-        logging.info(f"Wrote {len(data)} items to {output_path}")
+        if output_path.exists():
+            # Create backup
+            backup_path = pathlib.Path(str(output_path) + '.backup')
+            import shutil
+            shutil.copy2(output_path, backup_path)
+            logging.info(f"Backup created: {backup_path}")
+
+            # Merge with existing file
+            merged_lines = merge_with_existing_file(data, output_path)
+
+            # Write merged content
+            with open(output_path, "w", encoding='utf-8') as f:
+                f.writelines(merged_lines)
+
+            new_count = len(data) - len([l for l in merged_lines if l.strip() and not l.strip().startswith('#')] or [])
+            if new_count > 0:
+                logging.info(f"Added {new_count} new entries to {output_path}")
+                logging.info(f"Your existing comments and organization were preserved!")
+                logging.info(f"New entries added at the bottom - review and categorize them")
+            else:
+                logging.info(f"No new entries found - file unchanged")
+        else:
+            # New file - write simple list
+            with open(output_path, "w", encoding='utf-8') as f:
+                for item in sorted(list(data)):
+                    f.write(f"{item}\n")
+            logging.info(f"Created new file with {len(data)} items: {output_path}")
+
     except IOError as e:
         logging.error(f"Could not write to file {output_path}: {e}")
 
