@@ -82,9 +82,10 @@ class ProbeAnalyzer:
             with sqlite3.connect(db_path) as conn:
                 cursor = conn.cursor()
 
-                # Get both Clients and APs (Drones often act as APs)
+                # Get WiFi devices, Bluetooth devices, and APs (Drones often act as APs)
                 query = ("SELECT device FROM devices WHERE "
-                         "type='Wi-Fi Client' OR type='Wi-Fi AP'")
+                         "type='Wi-Fi Client' OR type='Wi-Fi AP' OR "
+                         "type='Bluetooth' OR type='BTLE'")
                 cursor.execute(query)
 
                 rows = cursor.fetchall()
