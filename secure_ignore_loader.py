@@ -28,7 +28,10 @@ class SecureIgnoreLoader:
     def load_mac_list(cls, file_path: pathlib.Path) -> List[str]:
         """
         Securely load MAC address ignore list
-        Supports both JSON and Python list formats
+        Supports three formats:
+        1. Simple text (one MAC per line, # for comments)
+        2. JSON array
+        3. Python list variable assignment
         """
         if not file_path.exists():
             logger.warning(f"MAC ignore list not found: {file_path}")
@@ -38,8 +41,9 @@ class SecureIgnoreLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
 
-            # Try JSON format first
-            if content.startswith('[') and content.endswith(']'):
+            # Detect format and parse accordingly
+            if content.startswith('['):
+                # JSON or Python list format
                 try:
                     mac_list = json.loads(content)
                     if not isinstance(mac_list, list):
@@ -48,8 +52,12 @@ class SecureIgnoreLoader:
                     # Fall back to Python list parsing
                     mac_list = cls._parse_python_list(content, 'ignore_list')
             else:
-                # Parse Python variable assignment
-                mac_list = cls._parse_python_list(content, 'ignore_list')
+                # Try simple text format first
+                mac_list = cls._parse_simple_text_format(content)
+
+                # If empty and content contains '=', try Python list format
+                if not mac_list and '=' in content:
+                    mac_list = cls._parse_python_list(content, 'ignore_list')
 
             # Validate all MAC addresses
             validated_macs = []
@@ -71,7 +79,10 @@ class SecureIgnoreLoader:
     def load_ssid_list(cls, file_path: pathlib.Path) -> List[str]:
         """
         Securely load SSID ignore list
-        Supports both JSON and Python list formats
+        Supports three formats:
+        1. Simple text (one SSID per line, # for comments)
+        2. JSON array
+        3. Python list variable assignment
         """
         if not file_path.exists():
             logger.warning(f"SSID ignore list not found: {file_path}")
@@ -81,8 +92,9 @@ class SecureIgnoreLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
 
-            # Try JSON format first
-            if content.startswith('[') and content.endswith(']'):
+            # Detect format and parse accordingly
+            if content.startswith('['):
+                # JSON or Python list format
                 try:
                     ssid_list = json.loads(content)
                     if not isinstance(ssid_list, list):
@@ -92,9 +104,13 @@ class SecureIgnoreLoader:
                     ssid_list = cls._parse_python_list(
                         content, 'non_alert_ssid_list')
             else:
-                # Parse Python variable assignment
-                ssid_list = cls._parse_python_list(
-                    content, 'non_alert_ssid_list')
+                # Try simple text format first
+                ssid_list = cls._parse_simple_text_format(content)
+
+                # If empty and content contains '=', try Python list format
+                if not ssid_list and '=' in content:
+                    ssid_list = cls._parse_python_list(
+                        content, 'non_alert_ssid_list')
 
             # Validate all SSIDs
             validated_ssids = []
@@ -110,6 +126,30 @@ class SecureIgnoreLoader:
         except Exception as e:
             logger.error(f"Error loading SSID list from {file_path}: {e}")
             return []
+
+    @staticmethod
+    def _parse_simple_text_format(content: str) -> List[str]:
+        """
+        Parse simple text format with comment support
+        Format: One item per line, # for comments (full line or end-of-line)
+
+        Example:
+            # My home network
+            AA:BB:CC:DD:EE:FF
+            11:22:33:44:55:66  # My phone
+        """
+        items = []
+        for line in content.split('\n'):
+            # Remove comments (everything after #)
+            line = line.split('#')[0].strip()
+
+            # Skip empty lines
+            if not line:
+                continue
+
+            items.append(line)
+
+        return items
 
     @staticmethod
     def _parse_python_list(content: str, variable_name: str) -> List[str]:
