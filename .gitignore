@@ -30,6 +30,7 @@ behavioral_reports/
 kml_files/
 analysis_logs/
 reports/
+kindle_output/
 
 # Personal/local-only files
 .last-session-end

@@ -1,0 +1,290 @@
+/* Kindle Technical Documentation Stylesheet */
+/* Xcode-inspired formatting optimized for E-ink displays */
+
+/* ========================================
+   Base Typography
+   ======================================== */
+body {
+    font-family: "Bookerly", "Amazon Ember", sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+}
+
+/* ========================================
+   Headers (Chapter Navigation)
+   ======================================== */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: bold;
+    page-break-after: avoid; /* Keep header with content */
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+}
+
+h1 {
+    font-size: 1.8em;
+    border-bottom: 2px solid #000;
+    padding-bottom: 0.3em;
+}
+
+h2 {
+    font-size: 1.5em;
+    border-bottom: 1px solid #555;
+    padding-bottom: 0.2em;
+}
+
+h3 {
+    font-size: 1.3em;
+}
+
+h4 {
+    font-size: 1.1em;
+}
+
+/* ========================================
+   Code Blocks (Critical for Technical Docs)
+   ======================================== */
+pre {
+    background-color: #f5f5f5;        /* Light grey background */
+    padding: 0.8em;
+    border: 1px solid #d3d3d3;
+    border-radius: 4px;
+    margin: 1em 0;
+
+    /* CRITICAL: Enables line wrapping for long code lines */
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+
+    font-family: "Courier New", "Liberation Mono", monospace;
+    font-size: 0.85em;
+    line-height: 1.4;
+
+    /* Prevent orphaned code blocks */
+    page-break-inside: avoid;
+}
+
+/* Syntax Highlighting (Grayscale-optimized for E-ink) */
+pre code {
+    background-color: transparent;
+    padding: 0;
+    border: none;
+}
+
+/* Bold for keywords (since E-ink doesn't do color well) */
+.sourceCode .kw { font-weight: bold; }           /* Keywords */
+.sourceCode .dt { font-weight: bold; }           /* Data types */
+.sourceCode .fu { font-style: italic; }          /* Functions */
+.sourceCode .co { font-style: italic; opacity: 0.7; } /* Comments */
+.sourceCode .st { text-decoration: underline; }  /* Strings */
+
+/* ========================================
+   Inline Code
+   ======================================== */
+code {
+    font-family: "Courier New", "Liberation Mono", monospace;
+    background-color: #f5f5f5;
+    padding: 0 4px;
+    border-radius: 2px;
+    font-size: 0.9em;
+}
+
+/* Don't double-style code inside pre blocks */
+pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+/* ========================================
+   Lists (Command Sequences)
+   ======================================== */
+ul, ol {
+    margin: 0.5em 0;
+    padding-left: 2em;
+}
+
+li {
+    margin: 0.3em 0;
+}
+
+/* Nested lists */
+ul ul, ol ul, ul ol, ol ol {
+    margin-top: 0.2em;
+    margin-bottom: 0.2em;
+}
+
+/* ========================================
+   Tables (Device Comparison, Reference Tables)
+   ======================================== */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+    font-size: 0.9em;
+    page-break-inside: avoid;
+}
+
+th {
+    background-color: #e8e8e8;
+    font-weight: bold;
+    padding: 0.5em;
+    border: 1px solid #aaa;
+    text-align: left;
+}
+
+td {
+    padding: 0.4em;
+    border: 1px solid #ccc;
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+/* ========================================
+   Blockquotes (Important Notes, Warnings)
+   ======================================== */
+blockquote {
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    border-left: 4px solid #555;
+    background-color: #f5f5f5;
+    font-style: italic;
+}
+
+/* ========================================
+   Links
+   ======================================== */
+a {
+    color: #000;  /* E-ink doesn't show blue well */
+    text-decoration: underline;
+}
+
+a:visited {
+    color: #333;
+}
+
+/* ========================================
+   Horizontal Rules (Section Dividers)
+   ======================================== */
+hr {
+    border: none;
+    border-top: 1px solid #aaa;
+    margin: 2em 0;
+}
+
+/* ========================================
+   Special Elements (Emojis, Icons)
+   ======================================== */
+/* Kindle doesn't render emojis well, use text fallbacks */
+.emoji {
+    font-style: normal;
+}
+
+/* ========================================
+   Page Breaks (Chapter Boundaries)
+   ======================================== */
+.page-break {
+    page-break-after: always;
+}
+
+h1 {
+    page-break-before: always; /* New page for each H1 */
+}
+
+/* ========================================
+   Alert Boxes (Red Flags, Warnings, Tips)
+   ======================================== */
+.alert-danger {
+    background-color: #f8f8f8;
+    border-left: 4px solid #000;
+    padding: 0.8em;
+    margin: 1em 0;
+    font-weight: bold;
+}
+
+.alert-warning {
+    background-color: #f8f8f8;
+    border-left: 4px solid #666;
+    padding: 0.8em;
+    margin: 1em 0;
+}
+
+.alert-info {
+    background-color: #f8f8f8;
+    border-left: 4px solid #aaa;
+    padding: 0.8em;
+    margin: 1em 0;
+}
+
+/* ========================================
+   Command Examples (Terminal/Shell)
+   ======================================== */
+.bash, .shell {
+    background-color: #2b2b2b;  /* Dark background for shell */
+    color: #f8f8f8;             /* Light text */
+    padding: 0.8em;
+    border-radius: 4px;
+    margin: 1em 0;
+    white-space: pre-wrap;
+    font-family: "Courier New", monospace;
+    font-size: 0.85em;
+}
+
+/* ========================================
+   SQL Code Blocks
+   ======================================== */
+.sql {
+    background-color: #f0f0f0;
+    border-left: 3px solid #555;
+}
+
+/* ========================================
+   File Paths and Directories
+   ======================================== */
+.filepath {
+    font-family: "Courier New", monospace;
+    background-color: #f5f5f5;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+/* ========================================
+   Metadata (Version, Last Updated)
+   ======================================== */
+.metadata {
+    font-size: 0.85em;
+    font-style: italic;
+    color: #666;
+    margin-top: 2em;
+    padding-top: 1em;
+    border-top: 1px solid #ccc;
+}
+
+/* ========================================
+   Table of Contents Styling
+   ======================================== */
+nav#TOC {
+    border: 1px solid #ccc;
+    padding: 1em;
+    margin: 2em 0;
+    background-color: #fafafa;
+}
+
+nav#TOC ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+nav#TOC li {
+    margin: 0.3em 0;
+}
+
+nav#TOC a {
+    text-decoration: none;
+    color: #000;
+}
+
+nav#TOC a:hover {
+    text-decoration: underline;
+}
