@@ -75,6 +75,32 @@ CYT is not just a drone detector - it's a general-purpose wireless threat intell
 
 📖 **See the [Multi-Threat Detection Guide](MULTI_THREAT_DETECTION.md) for complete details, real-world scenarios, and response strategies.**
 
+## 📱 Documentation as Kindle Ebooks
+
+**Read CYT documentation on the go!** All documentation is available as Kindle ebooks for offline reference in the field.
+
+### Available Ebook Collections
+
+```bash
+cd ~/my_projects/2_reference_docs
+
+# Generate all 3 CYT ebooks
+./generate_ebook_library.sh --cyt
+```
+
+This creates:
+1. **CYT Complete User Manual** - Setup, deployment, investigation guides
+2. **CYT Technical Reference** - Detection algorithms, health monitoring, testing
+3. **CYT Beast Mode Deployment** - High-performance hardware, Pi 5 builds, deployment guides
+
+**Perfect for**:
+- Field deployments (offline access to full docs)
+- Learning detection algorithms during downtime
+- Hardware shopping (Beast Mode spec sheets)
+- Troubleshooting without laptop access
+
+**See Also**: `/my_projects/2_reference_docs/EBOOK_CONFIGURATIONS.md` for detailed configurations
+
 ## Requirements
 
 - Python 3.6+
