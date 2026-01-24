@@ -99,3 +99,91 @@ def check_for_drones_seen_recently(
     except (sqlite3.Error, RuntimeError) as e:
         logging.error(f"Database error checking for drones in Kismet DB: {e}")
         raise DatabaseQueryError(f"Failed to check for drones: {e}") from e
+
+
+# --- CRUD DELETE Operations ---
+
+
+def remove_device(mac: str) -> bool:
+    """Remove a device from the watchlist by MAC address.
+
+    Returns True if device was removed, False if device was not found.
+    """
+    if not os.path.exists(db_path):
+        return False
+    try:
+        with safe_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM devices WHERE mac = ?", (mac,))
+            removed = cursor.rowcount > 0
+        if removed:
+            logging.info(f"Watchlist: Removed device {mac}")
+        else:
+            logging.warning(f"Watchlist: Device {mac} not found for removal")
+        return removed
+    except sqlite3.Error as e:
+        logging.error(f"Failed to remove device {mac} from watchlist: {e}")
+        raise DatabaseQueryError(f"Failed to remove device: {e}") from e
+
+
+def remove_all_devices() -> int:
+    """Remove all devices from the watchlist.
+
+    Returns the number of devices removed.
+    """
+    if not os.path.exists(db_path):
+        return 0
+    try:
+        with safe_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM devices")
+            count = cursor.fetchone()[0]
+            cursor.execute("DELETE FROM devices")
+        logging.info(f"Watchlist: Cleared all {count} devices")
+        return count
+    except sqlite3.Error as e:
+        logging.error(f"Failed to clear watchlist: {e}")
+        raise DatabaseQueryError(f"Failed to clear watchlist: {e}") from e
+
+
+# --- CRUD READ Operations (Full Details) ---
+
+
+def get_all_devices() -> List[dict]:
+    """Get all devices from the watchlist with full details.
+
+    Returns list of dicts with keys: mac, alias, device_type, notes
+    """
+    if not os.path.exists(db_path):
+        return []
+    try:
+        with safe_db_connection(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT mac, alias, device_type, notes FROM devices")
+            return [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        logging.error(f"Failed to get all devices from watchlist: {e}")
+        raise DatabaseQueryError(f"Failed to read watchlist: {e}") from e
+
+
+def get_device_details(mac: str) -> Optional[dict]:
+    """Get full details for a specific device by MAC address.
+
+    Returns dict with keys: mac, alias, device_type, notes, or None if not found.
+    """
+    if not os.path.exists(db_path):
+        return None
+    try:
+        with safe_db_connection(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT mac, alias, device_type, notes FROM devices WHERE mac = ?",
+                (mac,)
+            )
+            result = cursor.fetchone()
+            return dict(result) if result else None
+    except sqlite3.Error as e:
+        logging.error(f"Failed to get device details for {mac}: {e}")
+        raise DatabaseQueryError(f"Failed to read device details: {e}") from e
