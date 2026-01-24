@@ -50,5 +50,26 @@
   "behavioral_report": {
     "output_dir": "behavioral_reports",
     "auto_generate": true
+  },
+  "rf_monitoring": {
+    "enabled": false,
+    "device": "hackrf",
+    "database": "cyt_rf.db",
+    "sweep_interval_seconds": 300,
+    "threshold_dbm": -60,
+    "correlation_enabled": true,
+    "suspect_frequencies": [
+      {"start": 315, "end": 315, "description": "315 MHz - Key fobs, garage openers"},
+      {"start": 433, "end": 434, "description": "433 MHz - Key fobs, sensors"},
+      {"start": 2400, "end": 2483.5, "description": "WiFi/Video TX"},
+      {"start": 5150, "end": 5850, "description": "5 GHz WiFi/Drones"},
+      {"start": 824, "end": 894, "description": "Cellular uplink (GPS trackers)"}
+    ]
+  },
+  "flipper_integration": {
+    "enabled": false,
+    "import_directory": "flipper_imports",
+    "auto_import": false,
+    "watch_interval_seconds": 60
   }
 }
