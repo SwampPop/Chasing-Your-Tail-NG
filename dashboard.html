@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYT Dashboard - Chasing Your Tail NG</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0a0a0f 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1::before {
+            content: "🎯";
+        }
+
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-online {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid #22c55e;
+        }
+
+        .status-offline {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 14px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-value {
+            font-size: 48px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1;
+        }
+
+        .card-subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        /* Alert Level Card */
+        .alert-card {
+            grid-column: span 2;
+        }
+
+        .alert-level {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .alert-indicator {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            animation: pulse 2s infinite;
+        }
+
+        .alert-GREEN {
+            background: radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, rgba(34, 197, 94, 0.1) 70%);
+            box-shadow: 0 0 40px rgba(34, 197, 94, 0.3);
+        }
+
+        .alert-YELLOW {
+            background: radial-gradient(circle, rgba(234, 179, 8, 0.3) 0%, rgba(234, 179, 8, 0.1) 70%);
+            box-shadow: 0 0 40px rgba(234, 179, 8, 0.3);
+        }
+
+        .alert-RED {
+            background: radial-gradient(circle, rgba(239, 68, 68, 0.3) 0%, rgba(239, 68, 68, 0.1) 70%);
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.3);
+            animation: pulse-red 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.02); opacity: 0.9; }
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+
+        .alert-details {
+            flex: 1;
+        }
+
+        .alert-details h2 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .alert-details p {
+            color: #888;
+            font-size: 16px;
+        }
+
+        .text-green { color: #22c55e; }
+        .text-yellow { color: #eab308; }
+        .text-red { color: #ef4444; }
+
+        /* Device List */
+        .device-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .device-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+        }
+
+        .device-mac {
+            color: #fff;
+        }
+
+        .device-type {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .type-drone {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .type-close {
+            background: rgba(234, 179, 8, 0.2);
+            color: #eab308;
+        }
+
+        /* Stats Row */
+        .stats-row {
+            display: flex;
+            gap: 30px;
+            margin-top: 16px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #333;
+            color: #555;
+            font-size: 13px;
+        }
+
+        .last-update {
+            margin-top: 8px;
+            font-size: 12px;
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: #666;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top-color: #22c55e;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error State */
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .alert-card {
+                grid-column: span 1;
+            }
+
+            .alert-level {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .card-value {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Chasing Your Tail NG</h1>
+            <span id="connection-status" class="status-badge status-offline">Connecting...</span>
+        </header>
+
+        <div id="dashboard-content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>Connecting to CYT API...</span>
+            </div>
+        </div>
+
+        <footer>
+            <div>Chasing Your Tail NG v2.3 - Wireless Surveillance Detection System</div>
+            <div class="last-update">Last updated: <span id="last-update">--</span></div>
+        </footer>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000';
+        const API_KEY = '4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y';
+        const REFRESH_INTERVAL = 10000; // 10 seconds
+
+        async function fetchStatus() {
+            try {
+                const response = await fetch(`${API_URL}/status`, {
+                    headers: {
+                        'X-API-Key': API_KEY
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch status:', error);
+                throw error;
+            }
+        }
+
+        async function fetchTargets() {
+            try {
+                const response = await fetch(`${API_URL}/targets`, {
+                    headers: {
+                        'X-API-Key': API_KEY
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch targets:', error);
+                return { stalker_count: 0, stalker_macs: [] };
+            }
+        }
+
+        function getAlertIcon(level) {
+            switch (level) {
+                case 'GREEN': return '✓';
+                case 'YELLOW': return '⚠';
+                case 'RED': return '⚠';
+                default: return '?';
+            }
+        }
+
+        function getAlertMessage(level, drones, traffic) {
+            if (level === 'RED') {
+                return `ALERT: ${drones} drone(s) detected in your vicinity!`;
+            } else if (level === 'YELLOW') {
+                return `Elevated activity: ${traffic} devices detected in the last 5 minutes.`;
+            } else {
+                return 'All clear. No threats detected.';
+            }
+        }
+
+        function renderDashboard(status, targets) {
+            const content = document.getElementById('dashboard-content');
+            const connectionStatus = document.getElementById('connection-status');
+            const lastUpdate = document.getElementById('last-update');
+
+            connectionStatus.textContent = 'Online';
+            connectionStatus.className = 'status-badge status-online';
+            lastUpdate.textContent = new Date().toLocaleTimeString();
+
+            const alertLevel = status.alert_level || 'GREEN';
+            const alertColorClass = `text-${alertLevel.toLowerCase()}`;
+
+            content.innerHTML = `
+                <div class="grid">
+                    <!-- Alert Level Card -->
+                    <div class="card alert-card">
+                        <div class="card-header">
+                            <span class="card-title">Threat Level</span>
+                        </div>
+                        <div class="alert-level">
+                            <div class="alert-indicator alert-${alertLevel}">
+                                ${getAlertIcon(alertLevel)}
+                            </div>
+                            <div class="alert-details">
+                                <h2 class="${alertColorClass}">${alertLevel}</h2>
+                                <p>${getAlertMessage(alertLevel, status.drones_detected, status.traffic_5m)}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Drones Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Drones Detected</span>
+                            <span>🛸</span>
+                        </div>
+                        <div class="card-value ${status.drones_detected > 0 ? 'text-red' : ''}">${status.drones_detected}</div>
+                        <div class="card-subtitle">Known drone OUI patterns</div>
+                    </div>
+
+                    <!-- Stalkers Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Persistent Followers</span>
+                            <span>👁</span>
+                        </div>
+                        <div class="card-value ${targets.stalker_count > 0 ? 'text-yellow' : ''}">${targets.stalker_count}</div>
+                        <div class="card-subtitle">Devices seen 20min ago AND now</div>
+                    </div>
+
+                    <!-- Traffic Stats Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Network Traffic</span>
+                            <span>📡</span>
+                        </div>
+                        <div class="stats-row">
+                            <div class="stat">
+                                <div class="stat-value">${status.traffic_5m}</div>
+                                <div class="stat-label">Last 5 min</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">${status.traffic_15m}</div>
+                                <div class="stat-label">Last 15 min</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">${status.map_pins ? status.map_pins.length : 0}</div>
+                                <div class="stat-label">Close Contacts</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Close Contacts List -->
+                    <div class="card" style="grid-column: span 2;">
+                        <div class="card-header">
+                            <span class="card-title">Close Contacts (Signal > -50dBm)</span>
+                            <span>📶</span>
+                        </div>
+                        <div class="device-list">
+                            ${renderDeviceList(status.map_pins || [], status.drone_list || [])}
+                        </div>
+                    </div>
+
+                    <!-- Stalker MACs -->
+                    ${targets.stalker_count > 0 ? `
+                    <div class="card" style="grid-column: span 2;">
+                        <div class="card-header">
+                            <span class="card-title">Persistent Device MACs</span>
+                            <span>⚠️</span>
+                        </div>
+                        <div class="device-list">
+                            ${targets.stalker_macs.map(mac => `
+                                <div class="device-item">
+                                    <span class="device-mac">${mac}</span>
+                                    <span class="device-type type-close">STALKER</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function renderDeviceList(pins, drones) {
+            if (!pins.length && !drones.length) {
+                return '<div style="color: #666; text-align: center; padding: 20px;">No close contacts detected</div>';
+            }
+
+            // Combine and deduplicate
+            const devices = new Map();
+
+            drones.forEach(mac => {
+                devices.set(mac, { id: mac, type: 'DRONE' });
+            });
+
+            pins.forEach(pin => {
+                if (!devices.has(pin.id)) {
+                    devices.set(pin.id, pin);
+                }
+            });
+
+            return Array.from(devices.values())
+                .slice(0, 50) // Limit to 50 for performance
+                .map(device => `
+                    <div class="device-item">
+                        <span class="device-mac">${device.id}</span>
+                        <span class="device-type ${device.type === 'DRONE' ? 'type-drone' : 'type-close'}">${device.type}</span>
+                    </div>
+                `).join('');
+        }
+
+        function renderError(error) {
+            const content = document.getElementById('dashboard-content');
+            const connectionStatus = document.getElementById('connection-status');
+
+            connectionStatus.textContent = 'Offline';
+            connectionStatus.className = 'status-badge status-offline';
+
+            content.innerHTML = `
+                <div class="error">
+                    <h3>Connection Error</h3>
+                    <p>${error.message}</p>
+                    <p style="margin-top: 10px; font-size: 12px;">Retrying in ${REFRESH_INTERVAL / 1000} seconds...</p>
+                </div>
+            `;
+        }
+
+        async function updateDashboard() {
+            try {
+                const [status, targets] = await Promise.all([
+                    fetchStatus(),
+                    fetchTargets()
+                ]);
+                renderDashboard(status, targets);
+            } catch (error) {
+                renderError(error);
+            }
+        }
+
+        // Initial load
+        updateDashboard();
+
+        // Auto-refresh
+        setInterval(updateDashboard, REFRESH_INTERVAL);
+    </script>
+</body>
+</html>
