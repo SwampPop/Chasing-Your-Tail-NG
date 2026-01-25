@@ -896,6 +896,14 @@
         let deviceAliases = {};  // MAC -> {name, category, notes}
         let currentModalMac = null;
 
+        // SECURITY: HTML escape function to prevent XSS attacks
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         // Load aliases from server
         async function loadAliases() {
             try {
@@ -954,10 +962,10 @@
                     document.getElementById('modal-appearances').textContent = data.history.total_appearances || '0';
                 }
 
-                // Show tips
+                // Show tips (SECURITY: escape HTML to prevent XSS)
                 const tipsList = document.getElementById('modal-tips-list');
                 tipsList.innerHTML = (data.identification_tips || [])
-                    .map(tip => `<li>${tip}</li>`)
+                    .map(tip => `<li>${escapeHtml(tip)}</li>`)
                     .join('');
 
             } catch (error) {
@@ -1198,9 +1206,9 @@
                 if (isDrone) { typeClass = 'type-drone'; typeLabel = 'DRONE'; }
                 else if (isStalker) { typeClass = 'type-stalker'; typeLabel = 'STALKER'; }
 
-                // Show alias name if available, otherwise show MAC
-                const displayName = alias ? `<span class="device-alias">${alias.name}</span>` : '';
-                const ownerBadge = alias ? `<span class="pattern-badge owner-${alias.category}">${alias.category}</span>` : '';
+                // Show alias name if available, otherwise show MAC (SECURITY: escape HTML)
+                const displayName = alias ? `<span class="device-alias">${escapeHtml(alias.name)}</span>` : '';
+                const ownerBadge = alias ? `<span class="pattern-badge owner-${escapeHtml(alias.category)}">${escapeHtml(alias.category)}</span>` : '';
 
                 return `
                     <div class="device-item clickable" onclick="openDeviceModal('${device.id}')">
@@ -1223,12 +1231,12 @@
             document.getElementById('ao-arrivals-hr').textContent = summary.arrivals_last_hour || 0;
             document.getElementById('ao-departures-hr').textContent = summary.departures_last_hour || 0;
 
-            // Helper to render AO device with alias support
+            // Helper to render AO device with alias support (SECURITY: uses escapeHtml)
             function renderAODevice(d, iconClass, icon, showTime = false, showSignal = false, showPattern = false) {
                 const macUpper = d.mac.toUpperCase();
                 const alias = getAlias(macUpper);
-                const aliasDisplay = alias ? `<div class="device-alias" style="font-size:11px;">${alias.name}</div>` : '';
-                const ownerBadge = alias ? `<span class="pattern-badge owner-${alias.category}" style="font-size:8px;">${alias.category}</span>` : '';
+                const aliasDisplay = alias ? `<div class="device-alias" style="font-size:11px;">${escapeHtml(alias.name)}</div>` : '';
+                const ownerBadge = alias ? `<span class="pattern-badge owner-${escapeHtml(alias.category)}" style="font-size:8px;">${escapeHtml(alias.category)}</span>` : '';
 
                 return `
                     <div class="ao-device clickable" onclick="openDeviceModal('${d.mac}')">

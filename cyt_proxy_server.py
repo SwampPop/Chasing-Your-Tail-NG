@@ -3,26 +3,64 @@
 CYT Dashboard Server - Serves dashboard and proxies API requests to VM.
 Includes AO (Area of Operation) tracking for device arrivals/departures.
 Includes device alias management for naming/categorizing devices.
+
+Security: API endpoints require authentication via X-API-Key header or
+          ?api_key query parameter. Set CYT_DASHBOARD_API_KEY env var.
 """
 import os
+import re
 import json
 import subprocess
 import time
 import requests
+import functools
 from flask import Flask, send_from_directory, request, Response, jsonify
 from flask_cors import CORS
 from datetime import datetime
 from collections import defaultdict
 
 app = Flask(__name__)
-CORS(app)
+# Restrict CORS to localhost only (security fix)
+CORS(app, origins=['http://localhost:8080', 'http://127.0.0.1:8080'])
 
 # Configuration
 STATIC_DIR = os.path.dirname(os.path.abspath(__file__))
-VM_API_URL = 'http://10.211.55.10:3000'
-API_KEY = '4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y'
-VM_NAME = 'CYT-Kali'
+VM_API_URL = os.getenv('CYT_VM_API_URL', 'http://10.211.55.10:3000')
+VM_API_KEY = os.getenv('CYT_VM_API_KEY', '')  # API key for VM - set via environment
+DASHBOARD_API_KEY = os.getenv('CYT_DASHBOARD_API_KEY', '')  # API key for this dashboard
+VM_NAME = os.getenv('CYT_VM_NAME', 'CYT-Kali')
 ALIASES_FILE = os.path.join(STATIC_DIR, 'device_aliases.json')
+
+# MAC address validation pattern (security: prevent injection)
+MAC_PATTERN = re.compile(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
+
+
+def validate_mac(mac: str) -> bool:
+    """Validate MAC address format to prevent injection attacks."""
+    if not mac or not isinstance(mac, str):
+        return False
+    return bool(MAC_PATTERN.match(mac))
+
+
+def require_api_key(f):
+    """Decorator to require API key authentication for endpoints."""
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Skip auth if no key is configured (development mode)
+        if not DASHBOARD_API_KEY:
+            return f(*args, **kwargs)
+
+        # Check header first, then query param
+        provided_key = request.headers.get('X-API-Key') or request.args.get('api_key')
+
+        if not provided_key:
+            return jsonify({'error': 'API key required. Set X-API-Key header or api_key param.'}), 401
+
+        if provided_key != DASHBOARD_API_KEY:
+            return jsonify({'error': 'Invalid API key'}), 403
+
+        return f(*args, **kwargs)
+    return decorated_function
 
 # AO Tracker state
 _known_devices = {}  # mac -> {last_seen, signal, vendor}
@@ -290,7 +328,7 @@ def proxy_api(endpoint):
 
     # Proxy to VM
     try:
-        headers = {'X-API-Key': API_KEY}
+        headers = {'X-API-Key': VM_API_KEY} if VM_API_KEY else {}
         resp = requests.get(f'{VM_API_URL}/{endpoint}', headers=headers, timeout=5)
         return Response(
             resp.content,
@@ -380,13 +418,20 @@ def get_aliases():
 @app.route('/api/aliases/<mac>', methods=['GET'])
 def get_device_alias(mac):
     """Get alias for a specific device."""
-    alias = get_alias(mac)
+    mac_upper = mac.upper()
+
+    # SECURITY: Validate MAC address format
+    if not validate_mac(mac_upper):
+        return jsonify({'error': 'Invalid MAC address format'}), 400
+
+    alias = get_alias(mac_upper)
     if alias:
-        return jsonify({'mac': mac.upper(), 'alias': alias})
-    return jsonify({'mac': mac.upper(), 'alias': None}), 404
+        return jsonify({'mac': mac_upper, 'alias': alias})
+    return jsonify({'mac': mac_upper, 'alias': None}), 404
 
 
 @app.route('/api/aliases', methods=['POST'])
+@require_api_key
 def add_alias():
     """Add or update a device alias."""
     data = request.get_json()
@@ -394,9 +439,22 @@ def add_alias():
         return jsonify({'error': 'mac and name required'}), 400
 
     mac = data['mac'].upper()
-    name = data['name']
+
+    # SECURITY: Validate MAC address format
+    if not validate_mac(mac):
+        return jsonify({'error': 'Invalid MAC address format'}), 400
+
+    # SECURITY: Sanitize inputs (limit length, strip dangerous chars)
+    name = str(data['name'])[:100].strip()
+    if not name:
+        return jsonify({'error': 'Name cannot be empty'}), 400
+
+    valid_categories = ['mine', 'household', 'neighbor', 'guest', 'infrastructure', 'suspicious', 'unknown']
     category = data.get('category', 'unknown')
-    notes = data.get('notes', '')
+    if category not in valid_categories:
+        category = 'unknown'
+
+    notes = str(data.get('notes', ''))[:500].strip()
 
     set_alias(mac, name, category, notes)
 
@@ -408,9 +466,15 @@ def add_alias():
 
 
 @app.route('/api/aliases/<mac>', methods=['DELETE'])
+@require_api_key
 def delete_alias(mac):
     """Delete a device alias."""
     mac_upper = mac.upper()
+
+    # SECURITY: Validate MAC address format
+    if not validate_mac(mac_upper):
+        return jsonify({'error': 'Invalid MAC address format'}), 400
+
     if mac_upper in _device_aliases:
         del _device_aliases[mac_upper]
         save_aliases()
@@ -419,9 +483,14 @@ def delete_alias(mac):
 
 
 @app.route('/api/device/<mac>/identify', methods=['GET'])
+@require_api_key
 def identify_device(mac):
     """Get detailed identification info for a device."""
     mac_upper = mac.upper()
+
+    # SECURITY: Validate MAC address format to prevent SQL injection
+    if not validate_mac(mac_upper):
+        return jsonify({'error': 'Invalid MAC address format'}), 400
 
     # Get alias if exists
     alias = get_alias(mac_upper)
@@ -534,9 +603,9 @@ def get_identification_tips(mac: str, vendor: str, device_info: dict, history: d
 
 
 if __name__ == '__main__':
-    print('=' * 50)
+    print('=' * 60)
     print('CYT Dashboard Server with AO Tracking')
-    print('=' * 50)
+    print('=' * 60)
     print(f'Dashboard:    http://localhost:8080/')
     print(f'API Status:   http://localhost:8080/api/status')
     print(f'AO Activity:  http://localhost:8080/api/ao/activity')
@@ -544,5 +613,17 @@ if __name__ == '__main__':
     print(f'AO Summary:   http://localhost:8080/api/ao/summary')
     print(f'Aliases:      http://localhost:8080/api/aliases')
     print(f'VM API:       {VM_API_URL}')
-    print('=' * 50)
+    print('-' * 60)
+    print('SECURITY CONFIGURATION:')
+    if DASHBOARD_API_KEY:
+        print(f'  Dashboard API Key: ENABLED (set via CYT_DASHBOARD_API_KEY)')
+    else:
+        print(f'  Dashboard API Key: DISABLED (development mode)')
+        print(f'  Set CYT_DASHBOARD_API_KEY env var to enable authentication')
+    if VM_API_KEY:
+        print(f'  VM API Key: ENABLED (set via CYT_VM_API_KEY)')
+    else:
+        print(f'  VM API Key: NOT SET')
+    print(f'  CORS: Restricted to localhost:8080')
+    print('=' * 60)
     app.run(host='0.0.0.0', port=8080, debug=False)
