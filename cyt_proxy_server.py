@@ -12,12 +12,20 @@ import re
 import json
 import subprocess
 import time
+import logging
 import requests
 import functools
 from flask import Flask, send_from_directory, request, Response, jsonify
 from flask_cors import CORS
 from datetime import datetime
 from collections import defaultdict
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 # Restrict CORS to localhost only (security fix)
@@ -77,11 +85,15 @@ def load_aliases():
     global _device_aliases
     try:
         if os.path.exists(ALIASES_FILE):
-            with open(ALIASES_FILE, 'r') as f:
+            with open(ALIASES_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 _device_aliases = data.get('devices', {})
-    except Exception as e:
-        print(f"Error loading aliases: {e}")
+                logger.info(f"Loaded {len(_device_aliases)} device aliases")
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in aliases file: {e}")
+        _device_aliases = {}
+    except (IOError, OSError) as e:
+        logger.error(f"Error reading aliases file: {e}")
         _device_aliases = {}
     return _device_aliases
 
@@ -95,11 +107,15 @@ def save_aliases():
             "_categories": ["mine", "household", "neighbor", "guest", "infrastructure", "suspicious", "unknown"],
             "devices": _device_aliases
         }
-        with open(ALIASES_FILE, 'w') as f:
+        with open(ALIASES_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
+        logger.info(f"Saved {len(_device_aliases)} device aliases")
         return True
-    except Exception as e:
-        print(f"Error saving aliases: {e}")
+    except (IOError, OSError) as e:
+        logger.error(f"Error saving aliases file: {e}")
+        return False
+    except TypeError as e:
+        logger.error(f"Error serializing aliases to JSON: {e}")
         return False
 
 
@@ -133,23 +149,55 @@ def vm_exec(command: str, timeout: int = 10) -> str:
             timeout=timeout
         )
         return result.stdout.strip()
-    except Exception as e:
+    except subprocess.TimeoutExpired:
+        logger.warning(f"VM command timed out after {timeout}s: {command[:50]}...")
+        return "ERROR: Command timed out"
+    except subprocess.SubprocessError as e:
+        logger.error(f"VM subprocess error: {e}")
+        return f"ERROR: {e}"
+    except OSError as e:
+        logger.error(f"VM exec OS error (prlctl not found?): {e}")
         return f"ERROR: {e}"
 
 
-def lookup_vendor(mac: str) -> str:
-    """Look up vendor from MAC address."""
-    try:
-        from mac_vendor_lookup import MacLookup
-        return MacLookup().lookup(mac)
-    except:
-        # Check if randomized MAC
+# Cache MacLookup instance for performance (P2 fix)
+_mac_lookup_instance = None
+
+
+def _get_mac_lookup():
+    """Get cached MacLookup instance."""
+    global _mac_lookup_instance
+    if _mac_lookup_instance is None:
         try:
-            if mac[1].upper() in ['2', '6', 'A', 'E']:
-                return "Randomized"
-        except:
+            from mac_vendor_lookup import MacLookup
+            _mac_lookup_instance = MacLookup()
+        except ImportError:
+            logger.warning("mac_vendor_lookup not installed - vendor lookup disabled")
+            _mac_lookup_instance = False  # Mark as unavailable
+    return _mac_lookup_instance
+
+
+def lookup_vendor(mac: str) -> str:
+    """Look up vendor from MAC address with caching."""
+    # Try cached MacLookup
+    mac_lookup = _get_mac_lookup()
+    if mac_lookup:
+        try:
+            return mac_lookup.lookup(mac)
+        except KeyError:
+            # MAC not in database - check if randomized
             pass
-        return "Unknown"
+        except ValueError as e:
+            logger.debug(f"Invalid MAC for lookup: {mac} - {e}")
+
+    # Check if randomized MAC (local bit set in second nibble)
+    try:
+        if len(mac) >= 2 and mac[1].upper() in ['2', '6', 'A', 'E']:
+            return "Randomized"
+    except (IndexError, TypeError):
+        pass
+
+    return "Unknown"
 
 
 def get_current_devices_from_vm() -> dict:
