@@ -2,6 +2,7 @@
 """
 CYT Dashboard Server - Serves dashboard and proxies API requests to VM.
 Includes AO (Area of Operation) tracking for device arrivals/departures.
+Includes device alias management for naming/categorizing devices.
 """
 import os
 import json
@@ -21,12 +22,67 @@ STATIC_DIR = os.path.dirname(os.path.abspath(__file__))
 VM_API_URL = 'http://10.211.55.10:3000'
 API_KEY = '4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y'
 VM_NAME = 'CYT-Kali'
+ALIASES_FILE = os.path.join(STATIC_DIR, 'device_aliases.json')
 
 # AO Tracker state
 _known_devices = {}  # mac -> {last_seen, signal, vendor}
 _arrival_log = []    # Recent arrivals
 _departure_log = []  # Recent departures
+_device_aliases = {} # mac -> {name, category, notes}
 DEPARTURE_THRESHOLD = 300  # 5 minutes = departed
+
+
+# ============ Device Alias Management ============
+
+def load_aliases():
+    """Load device aliases from JSON file."""
+    global _device_aliases
+    try:
+        if os.path.exists(ALIASES_FILE):
+            with open(ALIASES_FILE, 'r') as f:
+                data = json.load(f)
+                _device_aliases = data.get('devices', {})
+    except Exception as e:
+        print(f"Error loading aliases: {e}")
+        _device_aliases = {}
+    return _device_aliases
+
+
+def save_aliases():
+    """Save device aliases to JSON file."""
+    try:
+        data = {
+            "_comment": "Device aliases for CYT - Add MAC addresses with friendly names",
+            "_format": "MAC (uppercase with colons): { name, category, notes }",
+            "_categories": ["mine", "household", "neighbor", "guest", "infrastructure", "suspicious", "unknown"],
+            "devices": _device_aliases
+        }
+        with open(ALIASES_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving aliases: {e}")
+        return False
+
+
+def get_alias(mac: str) -> dict:
+    """Get alias for a MAC address."""
+    return _device_aliases.get(mac.upper(), None)
+
+
+def set_alias(mac: str, name: str, category: str = "unknown", notes: str = ""):
+    """Set alias for a MAC address."""
+    _device_aliases[mac.upper()] = {
+        "name": name,
+        "category": category,
+        "notes": notes,
+        "added": datetime.now().isoformat()
+    }
+    save_aliases()
+
+
+# Load aliases on startup
+load_aliases()
 
 
 def vm_exec(command: str, timeout: int = 10) -> str:
@@ -308,6 +364,175 @@ def ao_summary():
     })
 
 
+# ============ Device Alias Endpoints ============
+
+@app.route('/api/aliases', methods=['GET'])
+def get_aliases():
+    """Get all device aliases."""
+    load_aliases()  # Reload in case file was edited
+    return jsonify({
+        'timestamp': datetime.now().isoformat(),
+        'aliases': _device_aliases,
+        'count': len(_device_aliases)
+    })
+
+
+@app.route('/api/aliases/<mac>', methods=['GET'])
+def get_device_alias(mac):
+    """Get alias for a specific device."""
+    alias = get_alias(mac)
+    if alias:
+        return jsonify({'mac': mac.upper(), 'alias': alias})
+    return jsonify({'mac': mac.upper(), 'alias': None}), 404
+
+
+@app.route('/api/aliases', methods=['POST'])
+def add_alias():
+    """Add or update a device alias."""
+    data = request.get_json()
+    if not data or 'mac' not in data or 'name' not in data:
+        return jsonify({'error': 'mac and name required'}), 400
+
+    mac = data['mac'].upper()
+    name = data['name']
+    category = data.get('category', 'unknown')
+    notes = data.get('notes', '')
+
+    set_alias(mac, name, category, notes)
+
+    return jsonify({
+        'success': True,
+        'mac': mac,
+        'alias': _device_aliases[mac]
+    })
+
+
+@app.route('/api/aliases/<mac>', methods=['DELETE'])
+def delete_alias(mac):
+    """Delete a device alias."""
+    mac_upper = mac.upper()
+    if mac_upper in _device_aliases:
+        del _device_aliases[mac_upper]
+        save_aliases()
+        return jsonify({'success': True, 'mac': mac_upper})
+    return jsonify({'error': 'Alias not found'}), 404
+
+
+@app.route('/api/device/<mac>/identify', methods=['GET'])
+def identify_device(mac):
+    """Get detailed identification info for a device."""
+    mac_upper = mac.upper()
+
+    # Get alias if exists
+    alias = get_alias(mac_upper)
+
+    # Get vendor info
+    vendor = lookup_vendor(mac_upper)
+
+    # Query Kismet for device details
+    query = f"""
+    sqlite3 /home/parallels/CYT/logs/kismet/*.kismet "
+    SELECT devmac, first_time, last_time, strongest_signal, type,
+           substr(device, instr(device, 'last_bssid')+14, 17) as connected_to
+    FROM devices
+    WHERE devmac = '{mac_upper}'
+    " 2>/dev/null
+    """
+    output = vm_exec(query.strip())
+
+    device_info = None
+    if output and not output.startswith("ERROR") and '|' in output:
+        parts = output.split('|')
+        if len(parts) >= 5:
+            device_info = {
+                'first_seen': datetime.fromtimestamp(int(parts[1])).strftime('%Y-%m-%d %H:%M:%S') if parts[1] else None,
+                'last_seen': datetime.fromtimestamp(int(parts[2])).strftime('%Y-%m-%d %H:%M:%S') if parts[2] else None,
+                'signal': int(parts[3]) if parts[3] else 0,
+                'type': parts[4] if parts[4] else 'Unknown',
+                'connected_to': parts[5] if len(parts) > 5 and parts[5] else None
+            }
+
+    # Get appearance history
+    history_query = f"""
+    sqlite3 /home/parallels/CYT/cyt_history.db "
+    SELECT COUNT(*) as appearances,
+           MIN(timestamp) as first_seen,
+           MAX(timestamp) as last_seen
+    FROM appearances
+    WHERE mac = '{mac_upper}'
+    " 2>/dev/null
+    """
+    history_output = vm_exec(history_query.strip())
+
+    history = None
+    if history_output and not history_output.startswith("ERROR") and '|' in history_output:
+        parts = history_output.split('|')
+        if len(parts) >= 3 and parts[0]:
+            history = {
+                'total_appearances': int(parts[0]),
+                'tracking_since': datetime.fromtimestamp(float(parts[1])).strftime('%Y-%m-%d %H:%M') if parts[1] else None,
+                'last_appearance': datetime.fromtimestamp(float(parts[2])).strftime('%Y-%m-%d %H:%M') if parts[2] else None
+            }
+
+    return jsonify({
+        'mac': mac_upper,
+        'vendor': vendor,
+        'alias': alias,
+        'device_info': device_info,
+        'history': history,
+        'identification_tips': get_identification_tips(mac_upper, vendor, device_info, history)
+    })
+
+
+def get_identification_tips(mac: str, vendor: str, device_info: dict, history: dict) -> list:
+    """Generate identification tips based on device characteristics."""
+    tips = []
+
+    # Signal strength tips
+    if device_info and device_info.get('signal'):
+        signal = device_info['signal']
+        if signal > -40:
+            tips.append("Very strong signal - likely in same room or immediately adjacent")
+        elif signal > -55:
+            tips.append("Strong signal - probably same building/nearby")
+        elif signal > -70:
+            tips.append("Moderate signal - could be neighbor or nearby outdoor")
+        else:
+            tips.append("Weak signal - likely far away or through multiple walls")
+
+    # Vendor-based tips
+    if vendor:
+        if 'Apple' in vendor:
+            tips.append("Apple device - check iPhone/iPad/Mac WiFi settings for this MAC")
+        elif 'Amazon' in vendor:
+            tips.append("Amazon device - likely Echo, Fire TV, or Ring device")
+        elif 'Espressif' in vendor:
+            tips.append("ESP32/ESP8266 chip - smart home device (plugs, bulbs, sensors)")
+        elif 'Randomized' in vendor:
+            tips.append("Randomized MAC - modern phone/tablet with privacy feature enabled")
+        elif any(x in vendor for x in ['Vantiva', 'HUMAX', 'Arcadyan', 'Sagemcom']):
+            tips.append("ISP equipment - likely a neighbor's cable modem or router")
+
+    # Connection-based tips
+    if device_info and device_info.get('connected_to'):
+        tips.append(f"Connected to BSSID: {device_info['connected_to']} - look up this router")
+
+    # History-based tips
+    if history and history.get('total_appearances'):
+        apps = history['total_appearances']
+        if apps > 50:
+            tips.append(f"Seen {apps} times - this is a regular in your area")
+        elif apps > 10:
+            tips.append(f"Seen {apps} times - appears periodically")
+        else:
+            tips.append(f"Only seen {apps} times - relatively new to your area")
+
+    # Identification actions
+    tips.append("To identify: Turn off your devices one by one and watch which MAC disappears")
+
+    return tips
+
+
 if __name__ == '__main__':
     print('=' * 50)
     print('CYT Dashboard Server with AO Tracking')
@@ -317,6 +542,7 @@ if __name__ == '__main__':
     print(f'AO Activity:  http://localhost:8080/api/ao/activity')
     print(f'AO Regulars:  http://localhost:8080/api/ao/regulars')
     print(f'AO Summary:   http://localhost:8080/api/ao/summary')
+    print(f'Aliases:      http://localhost:8080/api/aliases')
     print(f'VM API:       {VM_API_URL}')
     print('=' * 50)
     app.run(host='0.0.0.0', port=8080, debug=False)

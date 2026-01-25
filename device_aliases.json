@@ -1,0 +1,21 @@
+{
+  "_comment": "Device aliases for CYT - Add MAC addresses with friendly names",
+  "_format": "MAC (uppercase with colons): { name, category, notes }",
+  "_categories": [
+    "mine",
+    "household",
+    "neighbor",
+    "guest",
+    "infrastructure",
+    "suspicious",
+    "unknown"
+  ],
+  "devices": {
+    "C4:4F:D5:BB:40:6C": {
+      "name": "My Router",
+      "category": "mine",
+      "notes": "Main cable modem",
+      "added": "2026-01-25T14:05:26.562149"
+    }
+  }
+}

@@ -226,6 +226,180 @@
             font-size: 12px;
         }
 
+        /* Device naming modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: #1a1a2e;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal h3 {
+            margin-bottom: 16px;
+            color: #fff;
+            font-size: 18px;
+        }
+
+        .modal-mac {
+            font-family: 'SF Mono', Monaco, monospace;
+            background: rgba(255,255,255,0.05);
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+
+        .modal-info {
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 12px;
+        }
+
+        .modal-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .modal-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .modal-tips {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 11px;
+        }
+
+        .modal-tips ul {
+            margin: 8px 0 0 16px;
+            color: #a5b4fc;
+        }
+
+        .modal-tips li {
+            margin-bottom: 4px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #6366f1;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #5855e0;
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .btn-danger {
+            background: rgba(239,68,68,0.2);
+            color: #ef4444;
+        }
+
+        .btn-danger:hover {
+            background: rgba(239,68,68,0.3);
+        }
+
+        /* Clickable device items */
+        .device-item.clickable, .ao-device.clickable {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .device-item.clickable:hover, .ao-device.clickable:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        /* Device alias display */
+        .device-alias {
+            color: #22c55e;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        /* Owner category badges */
+        .owner-mine { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .owner-household { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .owner-neighbor { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+        .owner-guest { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+        .owner-infrastructure { background: rgba(107, 114, 128, 0.2); color: #6b7280; }
+        .owner-suspicious { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
         /* Main Dashboard Styles */
         header {
             display: flex;
@@ -649,8 +823,212 @@
         </div>
     </div>
 
+    <!-- Device Naming Modal -->
+    <div class="modal-overlay" id="device-modal">
+        <div class="modal">
+            <h3>Device Details</h3>
+            <div class="modal-mac" id="modal-mac">--:--:--:--:--:--</div>
+
+            <div class="modal-info" id="modal-device-info">
+                <div class="modal-info-row">
+                    <span>Vendor:</span>
+                    <span id="modal-vendor">Loading...</span>
+                </div>
+                <div class="modal-info-row">
+                    <span>Signal:</span>
+                    <span id="modal-signal">--</span>
+                </div>
+                <div class="modal-info-row">
+                    <span>First Seen:</span>
+                    <span id="modal-first-seen">--</span>
+                </div>
+                <div class="modal-info-row">
+                    <span>Last Seen:</span>
+                    <span id="modal-last-seen">--</span>
+                </div>
+                <div class="modal-info-row">
+                    <span>Appearances:</span>
+                    <span id="modal-appearances">--</span>
+                </div>
+                <div class="modal-info-row">
+                    <span>Connected To:</span>
+                    <span id="modal-connected-to">--</span>
+                </div>
+            </div>
+
+            <div class="modal-tips" id="modal-tips">
+                <strong>Identification Tips:</strong>
+                <ul id="modal-tips-list"></ul>
+            </div>
+
+            <form id="alias-form">
+                <div class="form-group">
+                    <label>Device Name</label>
+                    <input type="text" id="alias-name" placeholder="e.g., John's iPhone, Living Room Roku">
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="alias-category">
+                        <option value="unknown">Unknown</option>
+                        <option value="mine">Mine</option>
+                        <option value="household">Household</option>
+                        <option value="neighbor">Neighbor</option>
+                        <option value="guest">Guest</option>
+                        <option value="infrastructure">Infrastructure</option>
+                        <option value="suspicious">Suspicious</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notes (optional)</label>
+                    <input type="text" id="alias-notes" placeholder="e.g., North neighbor, Work colleague">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-danger" id="btn-delete-alias" style="display:none;">Delete</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const REFRESH_INTERVAL = 10000;
+        let deviceAliases = {};  // MAC -> {name, category, notes}
+        let currentModalMac = null;
+
+        // Load aliases from server
+        async function loadAliases() {
+            try {
+                const response = await fetch('/api/aliases');
+                const data = await response.json();
+                deviceAliases = data.aliases || {};
+            } catch (error) {
+                console.error('Failed to load aliases:', error);
+            }
+        }
+
+        // Get alias for a MAC address
+        function getAlias(mac) {
+            return deviceAliases[mac.toUpperCase()] || null;
+        }
+
+        // Open device modal
+        async function openDeviceModal(mac) {
+            currentModalMac = mac.toUpperCase();
+            const modal = document.getElementById('device-modal');
+            modal.classList.add('active');
+
+            // Set MAC
+            document.getElementById('modal-mac').textContent = currentModalMac;
+
+            // Reset form
+            document.getElementById('alias-name').value = '';
+            document.getElementById('alias-category').value = 'unknown';
+            document.getElementById('alias-notes').value = '';
+            document.getElementById('btn-delete-alias').style.display = 'none';
+
+            // Load existing alias if any
+            const alias = getAlias(currentModalMac);
+            if (alias) {
+                document.getElementById('alias-name').value = alias.name || '';
+                document.getElementById('alias-category').value = alias.category || 'unknown';
+                document.getElementById('alias-notes').value = alias.notes || '';
+                document.getElementById('btn-delete-alias').style.display = 'block';
+            }
+
+            // Fetch device details from server
+            try {
+                const response = await fetch(`/api/device/${encodeURIComponent(currentModalMac)}/identify`);
+                const data = await response.json();
+
+                document.getElementById('modal-vendor').textContent = data.vendor || 'Unknown';
+
+                if (data.device_info) {
+                    document.getElementById('modal-signal').textContent = data.device_info.signal ? `${data.device_info.signal} dBm` : '--';
+                    document.getElementById('modal-first-seen').textContent = data.device_info.first_seen || '--';
+                    document.getElementById('modal-last-seen').textContent = data.device_info.last_seen || '--';
+                    document.getElementById('modal-connected-to').textContent = data.device_info.connected_to || 'Not associated';
+                }
+
+                if (data.history) {
+                    document.getElementById('modal-appearances').textContent = data.history.total_appearances || '0';
+                }
+
+                // Show tips
+                const tipsList = document.getElementById('modal-tips-list');
+                tipsList.innerHTML = (data.identification_tips || [])
+                    .map(tip => `<li>${tip}</li>`)
+                    .join('');
+
+            } catch (error) {
+                console.error('Failed to load device details:', error);
+            }
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('device-modal').classList.remove('active');
+            currentModalMac = null;
+        }
+
+        // Save alias
+        document.getElementById('alias-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentModalMac) return;
+
+            const name = document.getElementById('alias-name').value.trim();
+            const category = document.getElementById('alias-category').value;
+            const notes = document.getElementById('alias-notes').value.trim();
+
+            if (!name) {
+                alert('Please enter a device name');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/aliases', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mac: currentModalMac, name, category, notes })
+                });
+
+                if (response.ok) {
+                    await loadAliases();
+                    closeModal();
+                    updateDashboard();  // Refresh to show new alias
+                }
+            } catch (error) {
+                console.error('Failed to save alias:', error);
+                alert('Failed to save alias');
+            }
+        });
+
+        // Delete alias
+        document.getElementById('btn-delete-alias').addEventListener('click', async () => {
+            if (!currentModalMac) return;
+            if (!confirm('Delete this device alias?')) return;
+
+            try {
+                const response = await fetch(`/api/aliases/${encodeURIComponent(currentModalMac)}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await loadAliases();
+                    closeModal();
+                    updateDashboard();
+                }
+            } catch (error) {
+                console.error('Failed to delete alias:', error);
+            }
+        });
+
+        // Close modal when clicking overlay
+        document.getElementById('device-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal-overlay')) {
+                closeModal();
+            }
+        });
 
         const OUI_DATABASE = {
             '000A27': 'Apple', '000A95': 'Apple', '000D93': 'Apple', '001451': 'Apple',
@@ -814,17 +1192,24 @@
                 const macUpper = device.id.toUpperCase();
                 const isStalker = stalkerSet.has(macUpper);
                 const isDrone = droneSet.has(macUpper);
+                const alias = getAlias(macUpper);
 
                 let typeClass = 'type-close', typeLabel = 'CLOSE';
                 if (isDrone) { typeClass = 'type-drone'; typeLabel = 'DRONE'; }
                 else if (isStalker) { typeClass = 'type-stalker'; typeLabel = 'STALKER'; }
 
+                // Show alias name if available, otherwise show MAC
+                const displayName = alias ? `<span class="device-alias">${alias.name}</span>` : '';
+                const ownerBadge = alias ? `<span class="pattern-badge owner-${alias.category}">${alias.category}</span>` : '';
+
                 return `
-                    <div class="device-item">
+                    <div class="device-item clickable" onclick="openDeviceModal('${device.id}')">
                         <div class="device-info">
+                            ${displayName}
                             <span class="device-mac">${device.id}</span>
                             <span class="device-vendor ${isRandomized ? 'randomized' : ''}">${vendor} (${device.signal} dBm)</span>
                         </div>
+                        ${ownerBadge}
                         <span class="device-category ${getCategoryClass(category)}">${getCategoryLabel(category)}</span>
                         <span class="device-type ${typeClass}">${typeLabel}</span>
                     </div>
@@ -838,78 +1223,57 @@
             document.getElementById('ao-arrivals-hr').textContent = summary.arrivals_last_hour || 0;
             document.getElementById('ao-departures-hr').textContent = summary.departures_last_hour || 0;
 
-            // Arrivals
-            const arrivalsCount = activity.recent_arrivals?.length || 0;
-            document.getElementById('arrivals-count').textContent = arrivalsCount;
-            document.getElementById('arrivals-list').innerHTML = arrivalsCount > 0
-                ? activity.recent_arrivals.slice(0, 10).map(d => `
-                    <div class="ao-device">
-                        <div class="ao-device-icon icon-arrival">+</div>
+            // Helper to render AO device with alias support
+            function renderAODevice(d, iconClass, icon, showTime = false, showSignal = false, showPattern = false) {
+                const macUpper = d.mac.toUpperCase();
+                const alias = getAlias(macUpper);
+                const aliasDisplay = alias ? `<div class="device-alias" style="font-size:11px;">${alias.name}</div>` : '';
+                const ownerBadge = alias ? `<span class="pattern-badge owner-${alias.category}" style="font-size:8px;">${alias.category}</span>` : '';
+
+                return `
+                    <div class="ao-device clickable" onclick="openDeviceModal('${d.mac}')">
+                        <div class="ao-device-icon ${iconClass}">${icon}</div>
                         <div class="ao-device-info">
+                            ${aliasDisplay}
                             <div class="ao-device-mac">${d.mac}</div>
                             <div class="ao-device-vendor">${d.vendor || lookupVendor(d.mac).vendor}</div>
                         </div>
                         <div class="ao-device-meta">
-                            <div class="ao-device-time">${d.time_str}</div>
-                            <div class="ao-device-signal">${d.signal} dBm</div>
+                            ${ownerBadge}
+                            ${showTime ? `<div class="ao-device-time">${d.time_str}</div>` : ''}
+                            ${showSignal && d.signal ? `<div class="ao-device-signal">${d.signal} dBm</div>` : ''}
+                            ${showPattern ? `<span class="pattern-badge pattern-${d.pattern}">${d.pattern}</span><div style="font-size:9px;margin-top:2px;">${d.appearances} times</div>` : ''}
                         </div>
                     </div>
-                `).join('')
+                `;
+            }
+
+            // Arrivals
+            const arrivalsCount = activity.recent_arrivals?.length || 0;
+            document.getElementById('arrivals-count').textContent = arrivalsCount;
+            document.getElementById('arrivals-list').innerHTML = arrivalsCount > 0
+                ? activity.recent_arrivals.slice(0, 10).map(d => renderAODevice(d, 'icon-arrival', '+', true, true)).join('')
                 : '<div class="empty-state">No recent arrivals</div>';
 
             // Departures
             const departuresCount = activity.recent_departures?.length || 0;
             document.getElementById('departures-count').textContent = departuresCount;
             document.getElementById('departures-list').innerHTML = departuresCount > 0
-                ? activity.recent_departures.slice(0, 10).map(d => `
-                    <div class="ao-device">
-                        <div class="ao-device-icon icon-departure">-</div>
-                        <div class="ao-device-info">
-                            <div class="ao-device-mac">${d.mac}</div>
-                            <div class="ao-device-vendor">${d.vendor || lookupVendor(d.mac).vendor}</div>
-                        </div>
-                        <div class="ao-device-meta">
-                            <div class="ao-device-time">${d.time_str}</div>
-                        </div>
-                    </div>
-                `).join('')
+                ? activity.recent_departures.slice(0, 10).map(d => renderAODevice(d, 'icon-departure', '-', true, false)).join('')
                 : '<div class="empty-state">No recent departures</div>';
 
             // New Devices
             const newCount = summary.new_devices?.length || 0;
             document.getElementById('new-count').textContent = newCount;
             document.getElementById('new-list').innerHTML = newCount > 0
-                ? summary.new_devices.slice(0, 10).map(d => `
-                    <div class="ao-device">
-                        <div class="ao-device-icon icon-new">?</div>
-                        <div class="ao-device-info">
-                            <div class="ao-device-mac">${d.mac}</div>
-                            <div class="ao-device-vendor">${d.vendor || lookupVendor(d.mac).vendor}</div>
-                        </div>
-                        <div class="ao-device-meta">
-                            <div class="ao-device-signal">${d.signal} dBm</div>
-                        </div>
-                    </div>
-                `).join('')
+                ? summary.new_devices.slice(0, 10).map(d => renderAODevice(d, 'icon-new', '?', false, true)).join('')
                 : '<div class="empty-state">No new devices</div>';
 
             // Regulars
             const regularsCount = regulars.regulars?.length || 0;
             document.getElementById('regulars-count').textContent = regularsCount;
             document.getElementById('regulars-list').innerHTML = regularsCount > 0
-                ? regulars.regulars.slice(0, 15).map(d => `
-                    <div class="ao-device">
-                        <div class="ao-device-icon icon-regular">★</div>
-                        <div class="ao-device-info">
-                            <div class="ao-device-mac">${d.mac}</div>
-                            <div class="ao-device-vendor">${d.vendor || lookupVendor(d.mac).vendor}</div>
-                        </div>
-                        <div class="ao-device-meta">
-                            <span class="pattern-badge pattern-${d.pattern}">${d.pattern}</span>
-                            <div style="font-size:9px;margin-top:2px;">${d.appearances} times</div>
-                        </div>
-                    </div>
-                `).join('')
+                ? regulars.regulars.slice(0, 15).map(d => renderAODevice(d, 'icon-regular', '★', false, false, true)).join('')
                 : '<div class="empty-state">Building patterns...</div>';
         }
 
@@ -946,9 +1310,13 @@
             }
         }
 
-        // Initial load and auto-refresh
-        updateDashboard();
-        setInterval(updateDashboard, REFRESH_INTERVAL);
+        // Initial load - load aliases first, then start dashboard
+        async function init() {
+            await loadAliases();
+            await updateDashboard();
+            setInterval(updateDashboard, REFRESH_INTERVAL);
+        }
+        init();
     </script>
 </body>
 </html>
