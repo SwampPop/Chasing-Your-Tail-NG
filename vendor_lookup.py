@@ -55,6 +55,9 @@ def lookup_vendor(mac: str) -> str:
             pass
         except ValueError as e:
             logger.debug(f"Invalid MAC for lookup: {mac} - {e}")
+        except RuntimeError as e:
+            # Event loop already running (Flask async conflict)
+            logger.debug(f"Async lookup failed for {mac}: {e}")
 
     # Check if randomized MAC (local bit set in second nibble)
     try:
