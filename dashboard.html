@@ -33,6 +33,12 @@
             border-bottom: 1px solid #333;
         }
 
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
         h1 {
             font-size: 28px;
             font-weight: 600;
@@ -44,6 +50,22 @@
 
         h1::before {
             content: "🎯";
+        }
+
+        .kismet-link {
+            padding: 6px 12px;
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid #6366f1;
+            border-radius: 8px;
+            color: #a5b4fc;
+            text-decoration: none;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .kismet-link:hover {
+            background: rgba(99, 102, 241, 0.3);
+            color: #fff;
         }
 
         .status-badge {
@@ -175,28 +197,61 @@
         .text-green { color: #22c55e; }
         .text-yellow { color: #eab308; }
         .text-red { color: #ef4444; }
+        .text-blue { color: #3b82f6; }
+        .text-purple { color: #a855f7; }
 
         /* Device List */
         .device-list {
-            max-height: 400px;
+            max-height: 500px;
             overflow-y: auto;
         }
 
         .device-item {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 12px;
             align-items: center;
             padding: 12px;
             background: rgba(255, 255, 255, 0.02);
             border-radius: 8px;
             margin-bottom: 8px;
-            font-family: 'SF Mono', Monaco, monospace;
             font-size: 13px;
+        }
+
+        .device-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
 
         .device-mac {
             color: #fff;
+            font-family: 'SF Mono', Monaco, monospace;
         }
+
+        .device-vendor {
+            color: #888;
+            font-size: 11px;
+        }
+
+        .device-vendor.randomized {
+            color: #a855f7;
+            font-style: italic;
+        }
+
+        .device-category {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .cat-network { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .cat-mobile { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .cat-iot { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+        .cat-media { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+        .cat-unknown { background: rgba(107, 114, 128, 0.2); color: #6b7280; }
 
         .device-type {
             padding: 4px 8px;
@@ -213,6 +268,37 @@
         .type-close {
             background: rgba(234, 179, 8, 0.2);
             color: #eab308;
+        }
+
+        .type-stalker {
+            background: rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            font-weight: 600;
+        }
+
+        /* Manufacturer Summary */
+        .vendor-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .vendor-chip {
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .vendor-chip .count {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
         }
 
         /* Stats Row */
@@ -317,13 +403,21 @@
             .card-value {
                 font-size: 36px;
             }
+
+            .device-item {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Chasing Your Tail NG</h1>
+            <div class="header-left">
+                <h1>Chasing Your Tail NG</h1>
+                <a href="http://10.211.55.10:2501" target="_blank" class="kismet-link">Open Kismet UI</a>
+            </div>
             <span id="connection-status" class="status-badge status-offline">Connecting...</span>
         </header>
 
@@ -345,18 +439,121 @@
         const API_KEY = '4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y';
         const REFRESH_INTERVAL = 10000; // 10 seconds
 
+        // OUI Database - Common manufacturers (first 6 hex chars without colons)
+        const OUI_DATABASE = {
+            // Apple
+            '000A27': 'Apple', '000A95': 'Apple', '000D93': 'Apple', '001451': 'Apple',
+            '0016CB': 'Apple', '0017F2': 'Apple', '0019E3': 'Apple', '001B63': 'Apple',
+            '001CB3': 'Apple', '001D4F': 'Apple', '001E52': 'Apple', '001EC2': 'Apple',
+            '001F5B': 'Apple', '001FF3': 'Apple', '002241': 'Apple', '002312': 'Apple',
+            '002332': 'Apple', '00236C': 'Apple', '002500': 'Apple', '00264A': 'Apple',
+            '002608': 'Apple', '003065': 'Apple', '003EE1': 'Apple', '0050E4': 'Apple',
+            '20A2E4': 'Apple', '24A074': 'Apple', '28E02C': 'Apple', '3C15C2': 'Apple',
+            '9C3E53': 'Apple', 'A4D1D2': 'Apple', 'ACBC32': 'Apple', 'B8E856': 'Apple',
+
+            // Samsung
+            '002119': 'Samsung', '002339': 'Samsung', '002566': 'Samsung', '1C62B8': 'Samsung',
+            '2C4401': 'Samsung', '5056BF': 'Samsung', '5C0A5B': 'Samsung', '78BD6E': 'Samsung',
+            '84119E': 'Samsung', '8C71F8': 'Samsung', '94350A': 'Samsung', '9463D1': 'Samsung',
+            'A0B4A5': 'Samsung', 'B0EC71': 'Samsung', 'C45006': 'Samsung', 'E09D13': 'Samsung',
+
+            // Google/Nest
+            '1C7B21': 'Google', '3C5AB4': 'Google', '54609A': 'Google', '94EB2C': 'Google',
+            'D86C63': 'Google', 'F4F5DB': 'Google', 'B423A2': 'Google',
+
+            // Amazon/Ring/Eero
+            '00FC8B': 'Amazon', '0C47C9': 'Amazon', '38F73D': 'Amazon', '44650D': 'Amazon',
+            '68DB96': 'Amazon', '74C246': 'Amazon', 'A002DC': 'Amazon', 'B47C9C': 'Amazon',
+            'F0D2F1': 'Amazon', 'D016C7': 'eero', 'B42046': 'eero',
+
+            // Network Equipment
+            '001A2B': 'Cisco', '001B2F': 'Netgear', '001E58': 'D-Link', '001F33': 'Netgear',
+            'B09575': 'TP-Link', 'C04A00': 'TP-Link', 'E894F6': 'TP-Link', '18A5FF': 'Arcadyan',
+            '186041': 'Arcadyan', '4405A3': 'Sagemcom', '44053F': 'Sagemcom',
+
+            // Streaming/Media
+            '105932': 'Roku', 'B0A737': 'Roku', 'D83134': 'Roku', 'AC3A7A': 'Roku',
+            '5CAAFD': 'Sonos', '48A6B8': 'Sonos', '000E58': 'Sonos',
+            '788038': 'FUNAI/TV', 'B88687': 'Liteon',
+
+            // IoT/Smart Home
+            'ACD074': 'Espressif', '240AC4': 'Espressif', '24B2DE': 'Espressif',
+            '5C25C1': 'Ring', '0C8CCC': 'Chamberlain',
+
+            // Cable/ISP Equipment
+            'C44FD5': 'Vantiva', '6C55E8': 'Vantiva', '8C2DAA': 'Vantiva', '889E68': 'Vantiva',
+            '4075C3': 'Vantiva', '54A65C': 'Vantiva', 'E4BFFA': 'Vantiva', '08A7C0': 'Vantiva',
+            '48E2AD': 'HUMAX', 'A840F8': 'HUMAX', '20F19E': 'Commscope', 'D4ABCD': 'Gaoshengda',
+
+            // Laptops/PCs
+            '001A7D': 'Dell', '0021F6': 'HP', '0024E8': 'Lenovo', '001D60': 'ASUS',
+            '581122': 'ASUS', '002564': 'Dell', '001E4F': 'Dell',
+
+            // Drones
+            '606001F': 'DJI', '34D262': 'DJI', '9003B7': 'Parrot', '001C27': 'Parrot',
+            '60601F': 'DJI'
+        };
+
+        // Category mapping
+        const VENDOR_CATEGORIES = {
+            'Apple': 'mobile', 'Samsung': 'mobile', 'Google': 'iot', 'Amazon': 'iot',
+            'eero': 'network', 'Cisco': 'network', 'Netgear': 'network', 'D-Link': 'network',
+            'TP-Link': 'network', 'Arcadyan': 'network', 'Sagemcom': 'network',
+            'Roku': 'media', 'Sonos': 'media', 'FUNAI/TV': 'media', 'Liteon': 'media',
+            'Espressif': 'iot', 'Ring': 'iot', 'Chamberlain': 'iot',
+            'Vantiva': 'network', 'HUMAX': 'network', 'Commscope': 'network', 'Gaoshengda': 'iot',
+            'Dell': 'mobile', 'HP': 'mobile', 'Lenovo': 'mobile', 'ASUS': 'mobile',
+            'DJI': 'drone', 'Parrot': 'drone'
+        };
+
+        function isRandomizedMac(mac) {
+            // Check if local bit is set (second hex char is 2, 6, A, or E)
+            const firstByte = parseInt(mac.replace(/:/g, '').substring(0, 2), 16);
+            return (firstByte & 0x02) !== 0;
+        }
+
+        function lookupVendor(mac) {
+            if (isRandomizedMac(mac)) {
+                return { vendor: 'Randomized MAC', category: 'unknown', isRandomized: true };
+            }
+
+            const oui = mac.replace(/:/g, '').substring(0, 6).toUpperCase();
+            const vendor = OUI_DATABASE[oui] || 'Unknown';
+            const category = VENDOR_CATEGORIES[vendor] || 'unknown';
+
+            return { vendor, category, isRandomized: false };
+        }
+
+        function getCategoryClass(category) {
+            const classes = {
+                'network': 'cat-network',
+                'mobile': 'cat-mobile',
+                'iot': 'cat-iot',
+                'media': 'cat-media',
+                'drone': 'type-drone',
+                'unknown': 'cat-unknown'
+            };
+            return classes[category] || 'cat-unknown';
+        }
+
+        function getCategoryLabel(category) {
+            const labels = {
+                'network': 'Network',
+                'mobile': 'Mobile',
+                'iot': 'IoT',
+                'media': 'Media',
+                'drone': 'Drone',
+                'unknown': '?'
+            };
+            return labels[category] || '?';
+        }
+
         async function fetchStatus() {
             try {
                 const response = await fetch(`${API_URL}/status`, {
-                    headers: {
-                        'X-API-Key': API_KEY
-                    }
+                    headers: { 'X-API-Key': API_KEY }
                 });
-
-                if (!response.ok) {
-                    throw new Error(`API Error: ${response.status}`);
-                }
-
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 return await response.json();
             } catch (error) {
                 console.error('Failed to fetch status:', error);
@@ -367,15 +564,9 @@
         async function fetchTargets() {
             try {
                 const response = await fetch(`${API_URL}/targets`, {
-                    headers: {
-                        'X-API-Key': API_KEY
-                    }
+                    headers: { 'X-API-Key': API_KEY }
                 });
-
-                if (!response.ok) {
-                    throw new Error(`API Error: ${response.status}`);
-                }
-
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 return await response.json();
             } catch (error) {
                 console.error('Failed to fetch targets:', error);
@@ -402,6 +593,24 @@
             }
         }
 
+        function getVendorSummary(devices) {
+            const vendorCounts = {};
+            devices.forEach(d => {
+                const { vendor } = lookupVendor(d.id);
+                vendorCounts[vendor] = (vendorCounts[vendor] || 0) + 1;
+            });
+
+            return Object.entries(vendorCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8)
+                .map(([vendor, count]) => `
+                    <div class="vendor-chip">
+                        <span>${vendor}</span>
+                        <span class="count">${count}</span>
+                    </div>
+                `).join('');
+        }
+
         function renderDashboard(status, targets) {
             const content = document.getElementById('dashboard-content');
             const connectionStatus = document.getElementById('connection-status');
@@ -413,6 +622,7 @@
 
             const alertLevel = status.alert_level || 'GREEN';
             const alertColorClass = `text-${alertLevel.toLowerCase()}`;
+            const pins = status.map_pins || [];
 
             content.innerHTML = `
                 <div class="grid">
@@ -468,9 +678,20 @@
                                 <div class="stat-label">Last 15 min</div>
                             </div>
                             <div class="stat">
-                                <div class="stat-value">${status.map_pins ? status.map_pins.length : 0}</div>
+                                <div class="stat-value">${pins.length}</div>
                                 <div class="stat-label">Close Contacts</div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Manufacturer Summary -->
+                    <div class="card" style="grid-column: span 2;">
+                        <div class="card-header">
+                            <span class="card-title">Manufacturers Detected</span>
+                            <span>�icing</span>
+                        </div>
+                        <div class="vendor-summary">
+                            ${getVendorSummary(pins)}
                         </div>
                     </div>
 
@@ -481,57 +702,65 @@
                             <span>📶</span>
                         </div>
                         <div class="device-list">
-                            ${renderDeviceList(status.map_pins || [], status.drone_list || [])}
+                            ${renderDeviceList(pins, status.drone_list || [], targets.stalker_macs || [])}
                         </div>
                     </div>
-
-                    <!-- Stalker MACs -->
-                    ${targets.stalker_count > 0 ? `
-                    <div class="card" style="grid-column: span 2;">
-                        <div class="card-header">
-                            <span class="card-title">Persistent Device MACs</span>
-                            <span>⚠️</span>
-                        </div>
-                        <div class="device-list">
-                            ${targets.stalker_macs.map(mac => `
-                                <div class="device-item">
-                                    <span class="device-mac">${mac}</span>
-                                    <span class="device-type type-close">STALKER</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                    ` : ''}
                 </div>
             `;
         }
 
-        function renderDeviceList(pins, drones) {
+        function renderDeviceList(pins, drones, stalkers) {
             if (!pins.length && !drones.length) {
                 return '<div style="color: #666; text-align: center; padding: 20px;">No close contacts detected</div>';
             }
+
+            const stalkerSet = new Set(stalkers.map(m => m.toUpperCase()));
+            const droneSet = new Set(drones.map(m => m.toUpperCase()));
 
             // Combine and deduplicate
             const devices = new Map();
 
             drones.forEach(mac => {
-                devices.set(mac, { id: mac, type: 'DRONE' });
+                devices.set(mac.toUpperCase(), { id: mac, type: 'DRONE' });
             });
 
             pins.forEach(pin => {
-                if (!devices.has(pin.id)) {
-                    devices.set(pin.id, pin);
+                const macUpper = pin.id.toUpperCase();
+                if (!devices.has(macUpper)) {
+                    devices.set(macUpper, pin);
                 }
             });
 
             return Array.from(devices.values())
-                .slice(0, 50) // Limit to 50 for performance
-                .map(device => `
-                    <div class="device-item">
-                        <span class="device-mac">${device.id}</span>
-                        <span class="device-type ${device.type === 'DRONE' ? 'type-drone' : 'type-close'}">${device.type}</span>
-                    </div>
-                `).join('');
+                .slice(0, 100)
+                .map(device => {
+                    const { vendor, category, isRandomized } = lookupVendor(device.id);
+                    const macUpper = device.id.toUpperCase();
+                    const isStalker = stalkerSet.has(macUpper);
+                    const isDrone = droneSet.has(macUpper) || device.type === 'DRONE';
+
+                    let typeClass = 'type-close';
+                    let typeLabel = 'CLOSE';
+
+                    if (isDrone) {
+                        typeClass = 'type-drone';
+                        typeLabel = 'DRONE';
+                    } else if (isStalker) {
+                        typeClass = 'type-stalker';
+                        typeLabel = 'STALKER';
+                    }
+
+                    return `
+                        <div class="device-item">
+                            <div class="device-info">
+                                <span class="device-mac">${device.id}</span>
+                                <span class="device-vendor ${isRandomized ? 'randomized' : ''}">${vendor}</span>
+                            </div>
+                            <span class="device-category ${getCategoryClass(category)}">${getCategoryLabel(category)}</span>
+                            <span class="device-type ${typeClass}">${typeLabel}</span>
+                        </div>
+                    `;
+                }).join('');
         }
 
         function renderError(error) {
