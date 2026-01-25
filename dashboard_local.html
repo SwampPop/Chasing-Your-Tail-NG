@@ -435,7 +435,7 @@
     </div>
 
     <script>
-        const API_URL = 'http://10.211.55.10:3000';
+        const API_URL = '';
         const API_KEY = '4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y';
         const REFRESH_INTERVAL = 10000; // 10 seconds
 
@@ -550,7 +550,7 @@
 
         async function fetchStatus() {
             try {
-                const response = await fetch(`${API_URL}/status`, {
+                const response = await fetch(`/api/status`, {
                     headers: { 'X-API-Key': API_KEY }
                 });
                 if (!response.ok) throw new Error(`API Error: ${response.status}`);
@@ -563,7 +563,7 @@
 
         async function fetchTargets() {
             try {
-                const response = await fetch(`${API_URL}/targets`, {
+                const response = await fetch(`/api/targets`, {
                     headers: { 'X-API-Key': API_KEY }
                 });
                 if (!response.ok) throw new Error(`API Error: ${response.status}`);
