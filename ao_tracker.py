@@ -10,13 +10,31 @@ import sqlite3
 import time
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
-from collections import defaultdict
 from contextlib import contextmanager
+
+from vendor_lookup import lookup_vendor  # Shared vendor lookup utility
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# ============ Configuration Constants ============
+
+# Detection thresholds
+DEPARTURE_THRESHOLD_SECONDS = 300  # 5 minutes without seeing = departed
+ARRIVAL_WINDOW_SECONDS = 60  # Consider device "just arrived" if seen within 60s
+PATTERN_WINDOW_SECONDS = 3600  # 1 hour window for pattern analysis
+
+# Pattern classification thresholds (appearances per hour)
+PATTERN_CONSTANT_THRESHOLD = 10  # Seen almost every scan
+PATTERN_FREQUENT_THRESHOLD = 5
+PATTERN_OCCASIONAL_THRESHOLD = 1
+
+# Query limits
+MIN_APPEARANCES_FOR_REGULAR = 5
+MAX_REGULARS_DISPLAYED = 50
+MAX_RECENT_RESULTS = 20
 
 
 @dataclass
@@ -47,18 +65,18 @@ class AORegular:
 class AOTracker:
     """Tracks device activity in the Area of Operation."""
 
-    # Thresholds for detection
-    DEPARTURE_THRESHOLD = 300  # 5 minutes without seeing = departed
-    ARRIVAL_WINDOW = 60  # Consider device "just arrived" if seen within 60s
-    PATTERN_WINDOW = 3600  # 1 hour window for pattern analysis
-
     def __init__(self, kismet_db_path: str, history_db_path: str):
+        """Initialize the AO Tracker.
+
+        Args:
+            kismet_db_path: Path to Kismet SQLite database
+            history_db_path: Path to CYT history SQLite database
+        """
         self.kismet_db_path = kismet_db_path
         self.history_db_path = history_db_path
-        self._device_cache: Dict[str, dict] = {}
-        self._last_scan_time = 0
+        self._device_cache: Dict[str, Dict[str, Any]] = {}
+        self._last_scan_time: float = 0
         self._known_devices: Dict[str, float] = {}  # mac -> last_seen timestamp
-        self._mac_lookup = None  # Cached MacLookup instance
 
     @contextmanager
     def _get_kismet_connection(self):
@@ -90,41 +108,10 @@ class AOTracker:
             if conn:
                 conn.close()
 
-    def _get_mac_lookup(self):
-        """Get cached MacLookup instance."""
-        if self._mac_lookup is None:
-            try:
-                from mac_vendor_lookup import MacLookup
-                self._mac_lookup = MacLookup()
-            except ImportError:
-                logger.warning("mac_vendor_lookup not installed - vendor lookup disabled")
-                self._mac_lookup = False  # Mark as unavailable
-        return self._mac_lookup
-
-    def _lookup_vendor(self, mac: str) -> str:
-        """Look up vendor from MAC address OUI with caching."""
-        mac_lookup = self._get_mac_lookup()
-        if mac_lookup:
-            try:
-                return mac_lookup.lookup(mac)
-            except KeyError:
-                # MAC not in database - check if randomized
-                pass
-            except ValueError as e:
-                logger.debug(f"Invalid MAC for lookup: {mac} - {e}")
-
-        # Check if randomized MAC (local bit set)
-        try:
-            if len(mac) >= 2 and mac[1].upper() in ['2', '6', 'A', 'E']:
-                return "Randomized MAC"
-        except (IndexError, TypeError):
-            pass
-        return "Unknown"
-
-    def get_current_devices(self) -> Dict[str, dict]:
-        """Get all devices currently visible (seen in last 5 minutes)."""
+    def get_current_devices(self) -> Dict[str, Dict[str, Any]]:
+        """Get all devices currently visible (seen within departure threshold)."""
         current_time = time.time()
-        cutoff_time = current_time - self.DEPARTURE_THRESHOLD
+        cutoff_time = current_time - DEPARTURE_THRESHOLD_SECONDS
 
         try:
             with self._get_kismet_connection() as conn:
@@ -137,7 +124,7 @@ class AOTracker:
                     ORDER BY last_time DESC
                 """, (cutoff_time,))
 
-                devices = {}
+                devices: Dict[str, Dict[str, Any]] = {}
                 for row in cursor.fetchall():
                     mac = row['devmac']
                     devices[mac] = {
@@ -146,7 +133,7 @@ class AOTracker:
                         'last_time': row['last_time'],
                         'signal': row['strongest_signal'],
                         'type': row['type'],
-                        'vendor': self._lookup_vendor(mac)
+                        'vendor': lookup_vendor(mac)
                     }
 
                 return devices
@@ -159,12 +146,16 @@ class AOTracker:
             return {}
 
     def detect_arrivals_departures(self) -> Tuple[List[DeviceEvent], List[DeviceEvent]]:
-        """Detect recent arrivals and departures."""
+        """Detect recent arrivals and departures.
+
+        Returns:
+            Tuple of (arrivals, departures) DeviceEvent lists
+        """
         current_time = time.time()
         current_devices = self.get_current_devices()
 
-        arrivals = []
-        departures = []
+        arrivals: List[DeviceEvent] = []
+        departures: List[DeviceEvent] = []
 
         # Detect arrivals (devices in current scan not in previous known devices)
         for mac, device in current_devices.items():
@@ -180,18 +171,18 @@ class AOTracker:
             self._known_devices[mac] = device['last_time']
 
         # Detect departures (devices in known list not seen recently)
-        departed_macs = []
+        departed_macs: List[str] = []
         for mac, last_seen in self._known_devices.items():
             if mac not in current_devices:
                 time_since_seen = current_time - last_seen
-                if time_since_seen > self.DEPARTURE_THRESHOLD:
+                if time_since_seen > DEPARTURE_THRESHOLD_SECONDS:
                     # Device departed
                     departures.append(DeviceEvent(
                         mac=mac,
                         event_type='departure',
                         timestamp=last_seen,
                         signal_strength=0,
-                        vendor=self._lookup_vendor(mac),
+                        vendor=lookup_vendor(mac),
                         time_in_ao=time_since_seen
                     ))
                     departed_macs.append(mac)
@@ -203,8 +194,15 @@ class AOTracker:
         self._last_scan_time = current_time
         return arrivals, departures
 
-    def get_recent_activity(self, minutes: int = 30) -> dict:
-        """Get recent arrival/departure activity."""
+    def get_recent_activity(self, minutes: int = 30) -> Dict[str, Any]:
+        """Get recent arrival/departure activity.
+
+        Args:
+            minutes: Time window in minutes to look back
+
+        Returns:
+            Dictionary with arrivals, departures, active devices, and summary
+        """
         current_time = time.time()
         cutoff_time = current_time - (minutes * 60)
 
@@ -220,19 +218,19 @@ class AOTracker:
                     ORDER BY last_time DESC
                 """, (cutoff_time, cutoff_time))
 
-                recent_arrivals = []
-                recent_departures = []
-                active_devices = []
+                recent_arrivals: List[Dict[str, Any]] = []
+                recent_departures: List[Dict[str, Any]] = []
+                active_devices: List[Dict[str, Any]] = []
 
                 for row in cursor.fetchall():
                     mac = row['devmac']
-                    device = {
+                    device: Dict[str, Any] = {
                         'mac': mac,
                         'first_time': row['first_time'],
                         'last_time': row['last_time'],
                         'signal': row['strongest_signal'],
                         'type': row['type'],
-                        'vendor': self._lookup_vendor(mac),
+                        'vendor': lookup_vendor(mac),
                         'first_time_readable': datetime.fromtimestamp(row['first_time']).strftime('%H:%M:%S'),
                         'last_time_readable': datetime.fromtimestamp(row['last_time']).strftime('%H:%M:%S')
                     }
@@ -242,7 +240,7 @@ class AOTracker:
                         recent_arrivals.append(device)
 
                     time_since_seen = current_time - row['last_time']
-                    if time_since_seen > self.DEPARTURE_THRESHOLD:
+                    if time_since_seen > DEPARTURE_THRESHOLD_SECONDS:
                         device['time_ago'] = f"{int(time_since_seen / 60)}m ago"
                         recent_departures.append(device)
                     else:
@@ -250,8 +248,8 @@ class AOTracker:
                         active_devices.append(device)
 
                 return {
-                    'arrivals': recent_arrivals[:20],  # Most recent 20
-                    'departures': recent_departures[:20],
+                    'arrivals': recent_arrivals[:MAX_RECENT_RESULTS],
+                    'departures': recent_departures[:MAX_RECENT_RESULTS],
                     'active': active_devices,
                     'summary': {
                         'total_arrivals': len(recent_arrivals),
@@ -268,8 +266,12 @@ class AOTracker:
             logger.error(f"I/O error getting recent activity: {e}")
             return {'error': str(e)}
 
-    def get_ao_regulars(self) -> List[dict]:
-        """Get devices that regularly appear in the AO."""
+    def get_ao_regulars(self) -> List[Dict[str, Any]]:
+        """Get devices that regularly appear in the AO.
+
+        Returns:
+            List of regular device dictionaries with appearance patterns
+        """
         try:
             with self._get_history_connection() as conn:
                 cursor = conn.cursor()
@@ -281,7 +283,7 @@ class AOTracker:
                 """)
 
                 # Get appearance patterns for each device
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT
                         mac,
                         COUNT(*) as appearance_count,
@@ -289,12 +291,12 @@ class AOTracker:
                         MAX(timestamp) as last_seen
                     FROM appearances
                     GROUP BY mac
-                    HAVING appearance_count >= 5
+                    HAVING appearance_count >= {MIN_APPEARANCES_FOR_REGULAR}
                     ORDER BY appearance_count DESC
-                    LIMIT 50
+                    LIMIT {MAX_REGULARS_DISPLAYED}
                 """)
 
-                regulars = []
+                regulars: List[Dict[str, Any]] = []
                 for row in cursor.fetchall():
                     mac = row['mac']
                     appearances = row['appearance_count']
@@ -305,18 +307,11 @@ class AOTracker:
                     total_time = last_seen - first_seen if last_seen > first_seen else 1
                     appearances_per_hour = (appearances / total_time) * 3600
 
-                    if appearances_per_hour > 10:
-                        pattern = 'constant'  # Seen almost every scan
-                    elif appearances_per_hour > 5:
-                        pattern = 'frequent'
-                    elif appearances_per_hour > 1:
-                        pattern = 'occasional'
-                    else:
-                        pattern = 'rare'
+                    pattern = _classify_appearance_pattern(appearances_per_hour)
 
                     regulars.append({
                         'mac': mac,
-                        'vendor': self._lookup_vendor(mac),
+                        'vendor': lookup_vendor(mac),
                         'appearances': appearances,
                         'first_seen': datetime.fromtimestamp(first_seen).strftime('%Y-%m-%d %H:%M'),
                         'last_seen': datetime.fromtimestamp(last_seen).strftime('%Y-%m-%d %H:%M'),
@@ -333,15 +328,20 @@ class AOTracker:
             logger.error(f"I/O error getting AO regulars: {e}")
             return []
 
-    def get_ao_summary(self) -> dict:
-        """Get a summary of AO activity."""
+
+    def get_ao_summary(self) -> Dict[str, Any]:
+        """Get a summary of AO activity.
+
+        Returns:
+            Dictionary with current device counts and categorization
+        """
         current_devices = self.get_current_devices()
         regulars = self.get_ao_regulars()
         recent = self.get_recent_activity(minutes=60)
 
         # Categorize current devices
-        new_devices = []
-        known_devices = []
+        new_devices: List[Dict[str, Any]] = []
+        known_devices: List[Dict[str, Any]] = []
         regular_macs = {r['mac'] for r in regulars}
 
         for mac, device in current_devices.items():
@@ -359,6 +359,25 @@ class AOTracker:
             'recent_arrivals': recent.get('summary', {}).get('total_arrivals', 0),
             'recent_departures': recent.get('summary', {}).get('total_departures', 0)
         }
+
+
+def _classify_appearance_pattern(apps_per_hour: float) -> str:
+    """Classify device appearance pattern based on frequency.
+
+    Args:
+        apps_per_hour: Number of appearances per hour
+
+    Returns:
+        Pattern classification string ('constant', 'frequent', 'occasional', 'rare')
+    """
+    if apps_per_hour > PATTERN_CONSTANT_THRESHOLD:
+        return 'constant'
+    elif apps_per_hour > PATTERN_FREQUENT_THRESHOLD:
+        return 'frequent'
+    elif apps_per_hour > PATTERN_OCCASIONAL_THRESHOLD:
+        return 'occasional'
+    else:
+        return 'rare'
 
 
 def main():

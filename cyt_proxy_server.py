@@ -15,10 +15,12 @@ import time
 import logging
 import requests
 import functools
+from typing import Dict, List, Optional, Tuple, Any
 from flask import Flask, send_from_directory, request, Response, jsonify
 from flask_cors import CORS
 from datetime import datetime
-from collections import defaultdict
+
+from vendor_lookup import lookup_vendor  # Shared vendor lookup utility
 
 # Configure logging
 logging.basicConfig(
@@ -31,13 +33,45 @@ app = Flask(__name__)
 # Restrict CORS to localhost only (security fix)
 CORS(app, origins=['http://localhost:8080', 'http://127.0.0.1:8080'])
 
-# Configuration
+# ============ Configuration Constants ============
+
+# Server configuration (from environment)
 STATIC_DIR = os.path.dirname(os.path.abspath(__file__))
 VM_API_URL = os.getenv('CYT_VM_API_URL', 'http://10.211.55.10:3000')
-VM_API_KEY = os.getenv('CYT_VM_API_KEY', '')  # API key for VM - set via environment
-DASHBOARD_API_KEY = os.getenv('CYT_DASHBOARD_API_KEY', '')  # API key for this dashboard
+VM_API_KEY = os.getenv('CYT_VM_API_KEY', '')
+DASHBOARD_API_KEY = os.getenv('CYT_DASHBOARD_API_KEY', '')
 VM_NAME = os.getenv('CYT_VM_NAME', 'CYT-Kali')
 ALIASES_FILE = os.path.join(STATIC_DIR, 'device_aliases.json')
+
+# VM database paths
+VM_KISMET_DB_PATH = '/home/parallels/CYT/logs/kismet/*.kismet'
+VM_HISTORY_DB_PATH = '/home/parallels/CYT/cyt_history.db'
+
+# AO Tracker thresholds
+DEPARTURE_THRESHOLD_SECONDS = 300  # 5 minutes without seeing = departed
+MAX_LOG_ENTRIES = 100  # Maximum entries in arrival/departure logs
+MIN_APPEARANCES_FOR_REGULAR = 5  # Minimum appearances to be considered "regular"
+MAX_REGULARS_DISPLAYED = 30  # Maximum regulars to return
+
+# Pattern classification thresholds (appearances per hour)
+PATTERN_CONSTANT_THRESHOLD = 10  # Seen almost every scan
+PATTERN_FREQUENT_THRESHOLD = 5
+PATTERN_OCCASIONAL_THRESHOLD = 1
+
+# Signal strength thresholds (dBm)
+SIGNAL_VERY_STRONG = -40  # Same room
+SIGNAL_STRONG = -55  # Same building
+SIGNAL_MODERATE = -70  # Neighbor/nearby
+
+# Input validation limits
+MAX_ALIAS_NAME_LENGTH = 100
+MAX_ALIAS_NOTES_LENGTH = 500
+
+# Valid device categories
+VALID_CATEGORIES = frozenset([
+    'mine', 'household', 'neighbor', 'guest',
+    'infrastructure', 'suspicious', 'unknown'
+])
 
 # MAC address validation pattern (security: prevent injection)
 MAC_PATTERN = re.compile(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
@@ -71,11 +105,10 @@ def require_api_key(f):
     return decorated_function
 
 # AO Tracker state
-_known_devices = {}  # mac -> {last_seen, signal, vendor}
-_arrival_log = []    # Recent arrivals
-_departure_log = []  # Recent departures
-_device_aliases = {} # mac -> {name, category, notes}
-DEPARTURE_THRESHOLD = 300  # 5 minutes = departed
+_known_devices: Dict[str, Dict[str, Any]] = {}  # mac -> {last_seen, signal, vendor}
+_arrival_log: List[Dict[str, Any]] = []  # Recent arrivals
+_departure_log: List[Dict[str, Any]] = []  # Recent departures
+_device_aliases: Dict[str, Dict[str, Any]] = {}  # mac -> {name, category, notes}
 
 
 # ============ Device Alias Management ============
@@ -160,53 +193,13 @@ def vm_exec(command: str, timeout: int = 10) -> str:
         return f"ERROR: {e}"
 
 
-# Cache MacLookup instance for performance (P2 fix)
-_mac_lookup_instance = None
-
-
-def _get_mac_lookup():
-    """Get cached MacLookup instance."""
-    global _mac_lookup_instance
-    if _mac_lookup_instance is None:
-        try:
-            from mac_vendor_lookup import MacLookup
-            _mac_lookup_instance = MacLookup()
-        except ImportError:
-            logger.warning("mac_vendor_lookup not installed - vendor lookup disabled")
-            _mac_lookup_instance = False  # Mark as unavailable
-    return _mac_lookup_instance
-
-
-def lookup_vendor(mac: str) -> str:
-    """Look up vendor from MAC address with caching."""
-    # Try cached MacLookup
-    mac_lookup = _get_mac_lookup()
-    if mac_lookup:
-        try:
-            return mac_lookup.lookup(mac)
-        except KeyError:
-            # MAC not in database - check if randomized
-            pass
-        except ValueError as e:
-            logger.debug(f"Invalid MAC for lookup: {mac} - {e}")
-
-    # Check if randomized MAC (local bit set in second nibble)
-    try:
-        if len(mac) >= 2 and mac[1].upper() in ['2', '6', 'A', 'E']:
-            return "Randomized"
-    except (IndexError, TypeError):
-        pass
-
-    return "Unknown"
-
-
-def get_current_devices_from_vm() -> dict:
+def get_current_devices_from_vm() -> Dict[str, Dict[str, Any]]:
     """Query VM for current devices from Kismet database."""
-    query = """
-    sqlite3 /home/parallels/CYT/logs/kismet/*.kismet '
+    query = f"""
+    sqlite3 {VM_KISMET_DB_PATH} '
     SELECT devmac, first_time, last_time, strongest_signal, type
     FROM devices
-    WHERE last_time > strftime(\"%s\", \"now\") - 300
+    WHERE last_time > strftime("%s", "now") - {DEPARTURE_THRESHOLD_SECONDS}
     ORDER BY last_time DESC
     ' 2>/dev/null
     """
@@ -230,15 +223,19 @@ def get_current_devices_from_vm() -> dict:
     return devices
 
 
-def update_ao_tracking():
-    """Update arrival/departure tracking."""
+def update_ao_tracking() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Update arrival/departure tracking.
+
+    Returns:
+        Tuple of (new_arrivals, new_departures) lists
+    """
     global _known_devices, _arrival_log, _departure_log
 
     current_time = time.time()
     current_devices = get_current_devices_from_vm()
 
-    new_arrivals = []
-    new_departures = []
+    new_arrivals: List[Dict[str, Any]] = []
+    new_departures: List[Dict[str, Any]] = []
 
     # Detect arrivals
     for mac, device in current_devices.items():
@@ -260,11 +257,11 @@ def update_ao_tracking():
         }
 
     # Detect departures
-    departed_macs = []
+    departed_macs: List[str] = []
     for mac, info in _known_devices.items():
         if mac not in current_devices:
             time_since_seen = current_time - info['last_seen']
-            if time_since_seen > DEPARTURE_THRESHOLD:
+            if time_since_seen > DEPARTURE_THRESHOLD_SECONDS:
                 departure = {
                     'mac': mac,
                     'vendor': info['vendor'],
@@ -280,17 +277,17 @@ def update_ao_tracking():
     for mac in departed_macs:
         del _known_devices[mac]
 
-    # Keep logs limited to last 100 entries
-    _arrival_log = _arrival_log[:100]
-    _departure_log = _departure_log[:100]
+    # Keep logs limited
+    _arrival_log = _arrival_log[:MAX_LOG_ENTRIES]
+    _departure_log = _departure_log[:MAX_LOG_ENTRIES]
 
     return new_arrivals, new_departures
 
 
-def get_ao_regulars_from_vm() -> list:
+def get_ao_regulars_from_vm() -> List[Dict[str, Any]]:
     """Get devices that regularly appear in the AO from history database."""
-    query = """
-    sqlite3 /home/parallels/CYT/cyt_history.db '
+    query = f"""
+    sqlite3 {VM_HISTORY_DB_PATH} '
     SELECT
         mac,
         COUNT(*) as appearances,
@@ -298,14 +295,14 @@ def get_ao_regulars_from_vm() -> list:
         MAX(timestamp) as last_seen
     FROM appearances
     GROUP BY mac
-    HAVING appearances >= 5
+    HAVING appearances >= {MIN_APPEARANCES_FOR_REGULAR}
     ORDER BY appearances DESC
-    LIMIT 30
+    LIMIT {MAX_REGULARS_DISPLAYED}
     ' 2>/dev/null
     """
     output = vm_exec(query.strip())
 
-    regulars = []
+    regulars: List[Dict[str, Any]] = []
     if output and not output.startswith("ERROR"):
         for line in output.split('\n'):
             if '|' in line:
@@ -319,14 +316,7 @@ def get_ao_regulars_from_vm() -> list:
                     total_time = max(last_seen - first_seen, 1)
                     apps_per_hour = (appearances / total_time) * 3600
 
-                    if apps_per_hour > 10:
-                        pattern = 'constant'
-                    elif apps_per_hour > 5:
-                        pattern = 'frequent'
-                    elif apps_per_hour > 1:
-                        pattern = 'occasional'
-                    else:
-                        pattern = 'rare'
+                    pattern = _classify_appearance_pattern(apps_per_hour)
 
                     regulars.append({
                         'mac': mac,
@@ -338,6 +328,25 @@ def get_ao_regulars_from_vm() -> list:
                         'hours_tracked': round(total_time / 3600, 1)
                     })
     return regulars
+
+
+def _classify_appearance_pattern(apps_per_hour: float) -> str:
+    """Classify device appearance pattern based on frequency.
+
+    Args:
+        apps_per_hour: Number of appearances per hour
+
+    Returns:
+        Pattern classification string
+    """
+    if apps_per_hour > PATTERN_CONSTANT_THRESHOLD:
+        return 'constant'
+    elif apps_per_hour > PATTERN_FREQUENT_THRESHOLD:
+        return 'frequent'
+    elif apps_per_hour > PATTERN_OCCASIONAL_THRESHOLD:
+        return 'occasional'
+    else:
+        return 'rare'
 
 
 # ============ Routes ============
@@ -493,16 +502,15 @@ def add_alias():
         return jsonify({'error': 'Invalid MAC address format'}), 400
 
     # SECURITY: Sanitize inputs (limit length, strip dangerous chars)
-    name = str(data['name'])[:100].strip()
+    name = str(data['name'])[:MAX_ALIAS_NAME_LENGTH].strip()
     if not name:
         return jsonify({'error': 'Name cannot be empty'}), 400
 
-    valid_categories = ['mine', 'household', 'neighbor', 'guest', 'infrastructure', 'suspicious', 'unknown']
     category = data.get('category', 'unknown')
-    if category not in valid_categories:
+    if category not in VALID_CATEGORIES:
         category = 'unknown'
 
-    notes = str(data.get('notes', ''))[:500].strip()
+    notes = str(data.get('notes', ''))[:MAX_ALIAS_NOTES_LENGTH].strip()
 
     set_alias(mac, name, category, notes)
 
@@ -548,7 +556,7 @@ def identify_device(mac):
 
     # Query Kismet for device details
     query = f"""
-    sqlite3 /home/parallels/CYT/logs/kismet/*.kismet "
+    sqlite3 {VM_KISMET_DB_PATH} "
     SELECT devmac, first_time, last_time, strongest_signal, type,
            substr(device, instr(device, 'last_bssid')+14, 17) as connected_to
     FROM devices
@@ -571,7 +579,7 @@ def identify_device(mac):
 
     # Get appearance history
     history_query = f"""
-    sqlite3 /home/parallels/CYT/cyt_history.db "
+    sqlite3 {VM_HISTORY_DB_PATH} "
     SELECT COUNT(*) as appearances,
            MIN(timestamp) as first_seen,
            MAX(timestamp) as last_seen
@@ -601,18 +609,33 @@ def identify_device(mac):
     })
 
 
-def get_identification_tips(mac: str, vendor: str, device_info: dict, history: dict) -> list:
-    """Generate identification tips based on device characteristics."""
-    tips = []
+def get_identification_tips(
+    mac: str,
+    vendor: Optional[str],
+    device_info: Optional[Dict[str, Any]],
+    history: Optional[Dict[str, Any]]
+) -> List[str]:
+    """Generate identification tips based on device characteristics.
+
+    Args:
+        mac: MAC address of the device
+        vendor: Vendor name from OUI lookup
+        device_info: Device info from Kismet database
+        history: Appearance history from CYT database
+
+    Returns:
+        List of identification tip strings
+    """
+    tips: List[str] = []
 
     # Signal strength tips
     if device_info and device_info.get('signal'):
         signal = device_info['signal']
-        if signal > -40:
+        if signal > SIGNAL_VERY_STRONG:
             tips.append("Very strong signal - likely in same room or immediately adjacent")
-        elif signal > -55:
+        elif signal > SIGNAL_STRONG:
             tips.append("Strong signal - probably same building/nearby")
-        elif signal > -70:
+        elif signal > SIGNAL_MODERATE:
             tips.append("Moderate signal - could be neighbor or nearby outdoor")
         else:
             tips.append("Weak signal - likely far away or through multiple walls")
