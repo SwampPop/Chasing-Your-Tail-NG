@@ -8,10 +8,15 @@ Provides analysis of device presence patterns over time.
 
 import sqlite3
 import time
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from collections import defaultdict
+from contextlib import contextmanager
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -53,33 +58,68 @@ class AOTracker:
         self._device_cache: Dict[str, dict] = {}
         self._last_scan_time = 0
         self._known_devices: Dict[str, float] = {}  # mac -> last_seen timestamp
+        self._mac_lookup = None  # Cached MacLookup instance
 
-    def _get_kismet_connection(self) -> sqlite3.Connection:
-        """Get read-only connection to Kismet database."""
-        conn = sqlite3.connect(f"file:{self.kismet_db_path}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        return conn
+    @contextmanager
+    def _get_kismet_connection(self):
+        """Get read-only connection to Kismet database with context manager."""
+        conn = None
+        try:
+            conn = sqlite3.connect(f"file:{self.kismet_db_path}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+            yield conn
+        except sqlite3.Error as e:
+            logger.error(f"Kismet database error: {e}")
+            raise
+        finally:
+            if conn:
+                conn.close()
 
-    def _get_history_connection(self) -> sqlite3.Connection:
-        """Get connection to CYT history database."""
-        conn = sqlite3.connect(self.history_db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    @contextmanager
+    def _get_history_connection(self):
+        """Get connection to CYT history database with context manager."""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.history_db_path)
+            conn.row_factory = sqlite3.Row
+            yield conn
+        except sqlite3.Error as e:
+            logger.error(f"History database error: {e}")
+            raise
+        finally:
+            if conn:
+                conn.close()
+
+    def _get_mac_lookup(self):
+        """Get cached MacLookup instance."""
+        if self._mac_lookup is None:
+            try:
+                from mac_vendor_lookup import MacLookup
+                self._mac_lookup = MacLookup()
+            except ImportError:
+                logger.warning("mac_vendor_lookup not installed - vendor lookup disabled")
+                self._mac_lookup = False  # Mark as unavailable
+        return self._mac_lookup
 
     def _lookup_vendor(self, mac: str) -> str:
-        """Look up vendor from MAC address OUI."""
-        try:
-            from mac_vendor_lookup import MacLookup
-            return MacLookup().lookup(mac)
-        except:
-            # Check if randomized MAC (local bit set)
+        """Look up vendor from MAC address OUI with caching."""
+        mac_lookup = self._get_mac_lookup()
+        if mac_lookup:
             try:
-                second_char = mac[1].upper()
-                if second_char in ['2', '6', 'A', 'E']:
-                    return "Randomized MAC"
-            except:
+                return mac_lookup.lookup(mac)
+            except KeyError:
+                # MAC not in database - check if randomized
                 pass
-            return "Unknown"
+            except ValueError as e:
+                logger.debug(f"Invalid MAC for lookup: {mac} - {e}")
+
+        # Check if randomized MAC (local bit set)
+        try:
+            if len(mac) >= 2 and mac[1].upper() in ['2', '6', 'A', 'E']:
+                return "Randomized MAC"
+        except (IndexError, TypeError):
+            pass
+        return "Unknown"
 
     def get_current_devices(self) -> Dict[str, dict]:
         """Get all devices currently visible (seen in last 5 minutes)."""
@@ -87,33 +127,35 @@ class AOTracker:
         cutoff_time = current_time - self.DEPARTURE_THRESHOLD
 
         try:
-            conn = self._get_kismet_connection()
-            cursor = conn.cursor()
+            with self._get_kismet_connection() as conn:
+                cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT devmac, first_time, last_time, strongest_signal, type
-                FROM devices
-                WHERE last_time > ?
-                ORDER BY last_time DESC
-            """, (cutoff_time,))
+                cursor.execute("""
+                    SELECT devmac, first_time, last_time, strongest_signal, type
+                    FROM devices
+                    WHERE last_time > ?
+                    ORDER BY last_time DESC
+                """, (cutoff_time,))
 
-            devices = {}
-            for row in cursor.fetchall():
-                mac = row['devmac']
-                devices[mac] = {
-                    'mac': mac,
-                    'first_time': row['first_time'],
-                    'last_time': row['last_time'],
-                    'signal': row['strongest_signal'],
-                    'type': row['type'],
-                    'vendor': self._lookup_vendor(mac)
-                }
+                devices = {}
+                for row in cursor.fetchall():
+                    mac = row['devmac']
+                    devices[mac] = {
+                        'mac': mac,
+                        'first_time': row['first_time'],
+                        'last_time': row['last_time'],
+                        'signal': row['strongest_signal'],
+                        'type': row['type'],
+                        'vendor': self._lookup_vendor(mac)
+                    }
 
-            conn.close()
-            return devices
+                return devices
 
-        except Exception as e:
-            print(f"Error getting current devices: {e}")
+        except sqlite3.Error as e:
+            logger.error(f"Database error getting current devices: {e}")
+            return {}
+        except (OSError, IOError) as e:
+            logger.error(f"I/O error getting current devices: {e}")
             return {}
 
     def detect_arrivals_departures(self) -> Tuple[List[DeviceEvent], List[DeviceEvent]]:
@@ -167,119 +209,128 @@ class AOTracker:
         cutoff_time = current_time - (minutes * 60)
 
         try:
-            conn = self._get_kismet_connection()
-            cursor = conn.cursor()
+            with self._get_kismet_connection() as conn:
+                cursor = conn.cursor()
 
-            # Get devices that appeared in the time window
-            cursor.execute("""
-                SELECT devmac, first_time, last_time, strongest_signal, type
-                FROM devices
-                WHERE first_time > ? OR last_time > ?
-                ORDER BY last_time DESC
-            """, (cutoff_time, cutoff_time))
+                # Get devices that appeared in the time window
+                cursor.execute("""
+                    SELECT devmac, first_time, last_time, strongest_signal, type
+                    FROM devices
+                    WHERE first_time > ? OR last_time > ?
+                    ORDER BY last_time DESC
+                """, (cutoff_time, cutoff_time))
 
-            recent_arrivals = []
-            recent_departures = []
-            active_devices = []
+                recent_arrivals = []
+                recent_departures = []
+                active_devices = []
 
-            for row in cursor.fetchall():
-                mac = row['devmac']
-                device = {
-                    'mac': mac,
-                    'first_time': row['first_time'],
-                    'last_time': row['last_time'],
-                    'signal': row['strongest_signal'],
-                    'type': row['type'],
-                    'vendor': self._lookup_vendor(mac),
-                    'first_time_readable': datetime.fromtimestamp(row['first_time']).strftime('%H:%M:%S'),
-                    'last_time_readable': datetime.fromtimestamp(row['last_time']).strftime('%H:%M:%S')
+                for row in cursor.fetchall():
+                    mac = row['devmac']
+                    device = {
+                        'mac': mac,
+                        'first_time': row['first_time'],
+                        'last_time': row['last_time'],
+                        'signal': row['strongest_signal'],
+                        'type': row['type'],
+                        'vendor': self._lookup_vendor(mac),
+                        'first_time_readable': datetime.fromtimestamp(row['first_time']).strftime('%H:%M:%S'),
+                        'last_time_readable': datetime.fromtimestamp(row['last_time']).strftime('%H:%M:%S')
+                    }
+
+                    # Categorize based on timing
+                    if row['first_time'] > cutoff_time:
+                        recent_arrivals.append(device)
+
+                    time_since_seen = current_time - row['last_time']
+                    if time_since_seen > self.DEPARTURE_THRESHOLD:
+                        device['time_ago'] = f"{int(time_since_seen / 60)}m ago"
+                        recent_departures.append(device)
+                    else:
+                        device['time_ago'] = f"{int(time_since_seen)}s ago"
+                        active_devices.append(device)
+
+                return {
+                    'arrivals': recent_arrivals[:20],  # Most recent 20
+                    'departures': recent_departures[:20],
+                    'active': active_devices,
+                    'summary': {
+                        'total_arrivals': len(recent_arrivals),
+                        'total_departures': len(recent_departures),
+                        'currently_active': len(active_devices),
+                        'window_minutes': minutes
+                    }
                 }
 
-                # Categorize based on timing
-                if row['first_time'] > cutoff_time:
-                    recent_arrivals.append(device)
-
-                time_since_seen = current_time - row['last_time']
-                if time_since_seen > self.DEPARTURE_THRESHOLD:
-                    device['time_ago'] = f"{int(time_since_seen / 60)}m ago"
-                    recent_departures.append(device)
-                else:
-                    device['time_ago'] = f"{int(time_since_seen)}s ago"
-                    active_devices.append(device)
-
-            conn.close()
-
-            return {
-                'arrivals': recent_arrivals[:20],  # Most recent 20
-                'departures': recent_departures[:20],
-                'active': active_devices,
-                'summary': {
-                    'total_arrivals': len(recent_arrivals),
-                    'total_departures': len(recent_departures),
-                    'currently_active': len(active_devices),
-                    'window_minutes': minutes
-                }
-            }
-
-        except Exception as e:
-            print(f"Error getting recent activity: {e}")
+        except sqlite3.Error as e:
+            logger.error(f"Database error getting recent activity: {e}")
+            return {'error': str(e)}
+        except (OSError, IOError) as e:
+            logger.error(f"I/O error getting recent activity: {e}")
             return {'error': str(e)}
 
     def get_ao_regulars(self) -> List[dict]:
         """Get devices that regularly appear in the AO."""
         try:
-            conn = self._get_history_connection()
-            cursor = conn.cursor()
+            with self._get_history_connection() as conn:
+                cursor = conn.cursor()
 
-            # Get appearance patterns for each device
-            cursor.execute("""
-                SELECT
-                    mac,
-                    COUNT(*) as appearance_count,
-                    MIN(timestamp) as first_seen,
-                    MAX(timestamp) as last_seen
-                FROM appearances
-                GROUP BY mac
-                HAVING appearance_count >= 5
-                ORDER BY appearance_count DESC
-                LIMIT 50
-            """)
+                # Ensure index exists for performance (P2 fix)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_appearances_mac
+                    ON appearances(mac)
+                """)
 
-            regulars = []
-            for row in cursor.fetchall():
-                mac = row['mac']
-                appearances = row['appearance_count']
-                first_seen = row['first_seen']
-                last_seen = row['last_seen']
+                # Get appearance patterns for each device
+                cursor.execute("""
+                    SELECT
+                        mac,
+                        COUNT(*) as appearance_count,
+                        MIN(timestamp) as first_seen,
+                        MAX(timestamp) as last_seen
+                    FROM appearances
+                    GROUP BY mac
+                    HAVING appearance_count >= 5
+                    ORDER BY appearance_count DESC
+                    LIMIT 50
+                """)
 
-                # Calculate pattern type
-                total_time = last_seen - first_seen if last_seen > first_seen else 1
-                appearances_per_hour = (appearances / total_time) * 3600
+                regulars = []
+                for row in cursor.fetchall():
+                    mac = row['mac']
+                    appearances = row['appearance_count']
+                    first_seen = row['first_seen']
+                    last_seen = row['last_seen']
 
-                if appearances_per_hour > 10:
-                    pattern = 'constant'  # Seen almost every scan
-                elif appearances_per_hour > 5:
-                    pattern = 'frequent'
-                elif appearances_per_hour > 1:
-                    pattern = 'occasional'
-                else:
-                    pattern = 'rare'
+                    # Calculate pattern type
+                    total_time = last_seen - first_seen if last_seen > first_seen else 1
+                    appearances_per_hour = (appearances / total_time) * 3600
 
-                regulars.append({
-                    'mac': mac,
-                    'vendor': self._lookup_vendor(mac),
-                    'appearances': appearances,
-                    'first_seen': datetime.fromtimestamp(first_seen).strftime('%Y-%m-%d %H:%M'),
-                    'last_seen': datetime.fromtimestamp(last_seen).strftime('%Y-%m-%d %H:%M'),
-                    'pattern': pattern,
-                    'hours_tracked': round(total_time / 3600, 1)
-                })
+                    if appearances_per_hour > 10:
+                        pattern = 'constant'  # Seen almost every scan
+                    elif appearances_per_hour > 5:
+                        pattern = 'frequent'
+                    elif appearances_per_hour > 1:
+                        pattern = 'occasional'
+                    else:
+                        pattern = 'rare'
 
-            conn.close()
-            return regulars
+                    regulars.append({
+                        'mac': mac,
+                        'vendor': self._lookup_vendor(mac),
+                        'appearances': appearances,
+                        'first_seen': datetime.fromtimestamp(first_seen).strftime('%Y-%m-%d %H:%M'),
+                        'last_seen': datetime.fromtimestamp(last_seen).strftime('%Y-%m-%d %H:%M'),
+                        'pattern': pattern,
+                        'hours_tracked': round(total_time / 3600, 1)
+                    })
 
-        except Exception as e:
-            print(f"Error getting AO regulars: {e}")
+                return regulars
+
+        except sqlite3.Error as e:
+            logger.error(f"Database error getting AO regulars: {e}")
+            return []
+        except (OSError, IOError) as e:
+            logger.error(f"I/O error getting AO regulars: {e}")
             return []
 
     def get_ao_summary(self) -> dict:
@@ -314,39 +365,49 @@ def main():
     """Test the AO tracker."""
     import glob
 
+    # Configure logging for standalone execution
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+
     # Find Kismet database
     kismet_dbs = glob.glob('/home/parallels/CYT/logs/kismet/*.kismet')
     if not kismet_dbs:
-        print("No Kismet database found")
+        logger.error("No Kismet database found")
         return
 
     kismet_db = max(kismet_dbs, key=lambda x: x)  # Most recent
     history_db = '/home/parallels/CYT/cyt_history.db'
 
-    print(f"Using Kismet DB: {kismet_db}")
-    print(f"Using History DB: {history_db}")
+    logger.info(f"Using Kismet DB: {kismet_db}")
+    logger.info(f"Using History DB: {history_db}")
 
     tracker = AOTracker(kismet_db, history_db)
 
     # Get summary
-    print("\n=== AO Summary ===")
+    logger.info("=== AO Summary ===")
     summary = tracker.get_ao_summary()
-    print(f"Currently visible: {summary['current_count']} devices")
-    print(f"Known regulars: {summary['regulars_count']}")
-    print(f"New/unknown devices: {len(summary['new_devices'])}")
+    logger.info(f"Currently visible: {summary['current_count']} devices")
+    logger.info(f"Known regulars: {summary['regulars_count']}")
+    logger.info(f"New/unknown devices: {len(summary['new_devices'])}")
 
     # Get regulars
-    print("\n=== AO Regulars (Top 10) ===")
+    logger.info("=== AO Regulars (Top 10) ===")
     regulars = tracker.get_ao_regulars()[:10]
     for r in regulars:
-        print(f"  {r['mac']} ({r['vendor'][:20]}) - {r['appearances']} appearances, pattern: {r['pattern']}")
+        vendor_short = r['vendor'][:20] if r['vendor'] else 'Unknown'
+        logger.info(f"  {r['mac']} ({vendor_short}) - {r['appearances']} appearances, pattern: {r['pattern']}")
 
     # Get recent activity
-    print("\n=== Recent Activity (30 min) ===")
+    logger.info("=== Recent Activity (30 min) ===")
     recent = tracker.get_recent_activity(minutes=30)
-    print(f"Arrivals: {recent['summary']['total_arrivals']}")
-    print(f"Departures: {recent['summary']['total_departures']}")
-    print(f"Currently active: {recent['summary']['currently_active']}")
+    if 'summary' in recent:
+        logger.info(f"Arrivals: {recent['summary']['total_arrivals']}")
+        logger.info(f"Departures: {recent['summary']['total_departures']}")
+        logger.info(f"Currently active: {recent['summary']['currently_active']}")
+    else:
+        logger.error(f"Error getting recent activity: {recent.get('error', 'Unknown error')}")
 
 
 if __name__ == '__main__':
