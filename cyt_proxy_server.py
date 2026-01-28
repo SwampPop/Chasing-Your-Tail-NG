@@ -44,8 +44,13 @@ VM_NAME = os.getenv('CYT_VM_NAME', 'CYT-Kali')
 ALIASES_FILE = os.path.join(STATIC_DIR, 'device_aliases.json')
 
 # VM database paths
-VM_KISMET_DB_PATH = '/home/parallels/CYT/logs/kismet/*.kismet'
+VM_KISMET_DB_DIR = '/home/parallels/CYT/logs/kismet'
 VM_HISTORY_DB_PATH = '/home/parallels/CYT/cyt_history.db'
+
+# Cached latest Kismet DB path
+_cached_kismet_db: Optional[str] = None
+_kismet_db_cache_time: float = 0
+KISMET_DB_CACHE_TTL = 60  # Refresh cache every 60 seconds
 
 # AO Tracker thresholds
 DEPARTURE_THRESHOLD_SECONDS = 300  # 5 minutes without seeing = departed
@@ -193,10 +198,37 @@ def vm_exec(command: str, timeout: int = 10) -> str:
         return f"ERROR: {e}"
 
 
+def get_latest_kismet_db() -> Optional[str]:
+    """Get the most recent Kismet database file from the VM."""
+    global _cached_kismet_db, _kismet_db_cache_time
+
+    # Use cached value if recent
+    if _cached_kismet_db and (time.time() - _kismet_db_cache_time < KISMET_DB_CACHE_TTL):
+        return _cached_kismet_db
+
+    # Find the latest .kismet file
+    cmd = f"ls -t {VM_KISMET_DB_DIR}/*.kismet 2>/dev/null | head -1"
+    result = vm_exec(cmd)
+
+    if result and not result.startswith("ERROR") and result.strip():
+        _cached_kismet_db = result.strip()
+        _kismet_db_cache_time = time.time()
+        logger.debug(f"Latest Kismet DB: {_cached_kismet_db}")
+        return _cached_kismet_db
+
+    logger.warning(f"No Kismet DB found in {VM_KISMET_DB_DIR}")
+    return None
+
+
 def get_current_devices_from_vm() -> Dict[str, Dict[str, Any]]:
     """Query VM for current devices from Kismet database."""
+    kismet_db = get_latest_kismet_db()
+    if not kismet_db:
+        logger.warning("No Kismet DB available")
+        return {}
+
     query = f"""
-    sqlite3 {VM_KISMET_DB_PATH} '
+    sqlite3 '{kismet_db}' '
     SELECT devmac, first_time, last_time, strongest_signal, type
     FROM devices
     WHERE last_time > strftime("%s", "now") - {DEPARTURE_THRESHOLD_SECONDS}
@@ -601,27 +633,28 @@ def identify_device(mac):
     vendor = lookup_vendor(mac_upper)
 
     # Query Kismet for device details
-    query = f"""
-    sqlite3 {VM_KISMET_DB_PATH} "
-    SELECT devmac, first_time, last_time, strongest_signal, type,
-           substr(device, instr(device, 'last_bssid')+14, 17) as connected_to
-    FROM devices
-    WHERE devmac = '{mac_upper}'
-    " 2>/dev/null
-    """
-    output = vm_exec(query.strip())
-
+    kismet_db = get_latest_kismet_db()
     device_info = None
-    if output and not output.startswith("ERROR") and '|' in output:
-        parts = output.split('|')
-        if len(parts) >= 5:
-            device_info = {
-                'first_seen': datetime.fromtimestamp(int(parts[1])).strftime('%Y-%m-%d %H:%M:%S') if parts[1] else None,
-                'last_seen': datetime.fromtimestamp(int(parts[2])).strftime('%Y-%m-%d %H:%M:%S') if parts[2] else None,
-                'signal': int(parts[3]) if parts[3] else 0,
-                'type': parts[4] if parts[4] else 'Unknown',
-                'connected_to': parts[5] if len(parts) > 5 and parts[5] else None
-            }
+    if kismet_db:
+        query = f"""
+        sqlite3 '{kismet_db}' "
+        SELECT devmac, first_time, last_time, strongest_signal, type,
+               substr(device, instr(device, 'last_bssid')+14, 17) as connected_to
+        FROM devices
+        WHERE devmac = '{mac_upper}'
+        " 2>/dev/null
+        """
+        output = vm_exec(query.strip())
+        if output and not output.startswith("ERROR") and '|' in output:
+            parts = output.split('|')
+            if len(parts) >= 5:
+                device_info = {
+                    'first_seen': datetime.fromtimestamp(int(parts[1])).strftime('%Y-%m-%d %H:%M:%S') if parts[1] else None,
+                    'last_seen': datetime.fromtimestamp(int(parts[2])).strftime('%Y-%m-%d %H:%M:%S') if parts[2] else None,
+                    'signal': int(parts[3]) if parts[3] else 0,
+                    'type': parts[4] if parts[4] else 'Unknown',
+                    'connected_to': parts[5] if len(parts) > 5 and parts[5] else None
+                }
 
     # Get appearance history
     history_query = f"""

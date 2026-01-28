@@ -1,15 +1,35 @@
 # Handoff Document - CYT Operational Setup
 
 **Created**: 2026-01-25 13:10
-**Last Updated**: 2026-01-28 01:22
-**Session Duration**: ~45 minutes (this session)
+**Last Updated**: 2026-01-28 03:15
+**Session Duration**: ~2 hours (this session)
 
 ## Goal
 Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detection, including the web dashboard viewable from macOS, with systematic device identification and threat assessment capabilities.
 
-## Session 2026-01-28 Summary
+## Session 2026-01-28 Summary (Continued)
 
-### What Was Done
+### What Was Done This Session
+- Verified CYT system status (Kismet PID 46302, CYT Monitor PID 51430)
+- Restarted proxy server on macOS (was not running)
+- Fixed dashboard access (Chrome tab was hidden in background)
+- Fixed Kismet UI access - must use proxy route `localhost:8080/kismet/` NOT direct VM IP
+- **OSINT Research**: Deep dive into Benn Jordan and Civil Defense Engineer content
+- Validated existing modules: `flock_detector.py`, `imsi_detector.py`, `BENN_JORDAN_GADGETS.md`
+- Identified 5 new modules to create for CYT enhancement
+- Created equipment purchase list for new capabilities
+- **Created `context_engine.py`** (1032 lines) - Situational awareness module:
+  - DeFlock API integration for ALPR camera locations
+  - Airplanes.live API integration for aircraft tracking
+  - Surveillance aircraft pattern matching (FBI, CBP, military)
+  - Context snapshot generation with threat scoring
+  - Database storage for camera/aircraft sightings
+  - Background polling with configurable intervals
+- **Integrated context engine into `chasing_your_tail.py`**
+- **Updated `config.json`** with context_engine configuration
+- **Updated `config_validator.py`** with context_engine schema
+
+### Previous Session Work (2026-01-28 01:22)
 - Started CYT system from cold start (VM was running but services stopped)
 - Configured Kismet HTTP credentials (username: `kismet`, password: `cyt2026`)
 - Added 23 device aliases with vendor identification
@@ -99,9 +119,11 @@ python3 cyt_proxy_server.py &
 # 2. Open dashboard in Chrome
 open -a "Google Chrome" "http://localhost:8080/"
 
-# 3. Open Kismet in Chrome (login: kismet / cyt2026)
-open -a "Google Chrome" "http://10.211.55.10:2501/"
+# 3. Open Kismet in Chrome (via proxy - login: kismet / cyt2026)
+open -a "Google Chrome" "http://localhost:8080/kismet/"
 ```
+
+**NOTE**: Access Kismet via the proxy (`localhost:8080/kismet/`) NOT directly (`10.211.55.10:2501`). Direct VM IP access fails from Chrome.
 
 ### Check Status
 ```bash
@@ -111,8 +133,8 @@ prlctl exec CYT-Kali "pgrep -a kismet; pgrep -a python"
 # Test API
 curl -s http://localhost:8080/api/status | python3 -c "import sys,json;d=json.load(sys.stdin);print(f'Alert: {d[\"alert_level\"]}, Devices: {d[\"traffic_5m\"]}')"
 
-# Test Kismet
-curl -s -u kismet:cyt2026 http://10.211.55.10:2501/system/status.json | python3 -c "import sys,json;d=json.load(sys.stdin);print(f'Kismet Devices: {d[\"kismet.system.devices.count\"]}')"
+# Test Kismet (via proxy)
+curl -s -u kismet:cyt2026 http://localhost:8080/kismet/system/status.json | python3 -c "import sys,json;d=json.load(sys.stdin);print(f'Kismet Devices: {d[\"kismet.system.devices.count\"]}')"
 ```
 
 ### If USB Adapter Disconnects
@@ -197,13 +219,126 @@ The Alfa AWUS1900 occasionally disconnects from the VM. Signs:
 
 Fix: Reconnect with `prlctl set CYT-Kali --device-connect "802.11ac NIC"`
 
+## OSINT Research Findings (Benn Jordan & Civil Defense Engineer)
+
+### Already Implemented in CYT
+| Module | Source | Status |
+|--------|--------|--------|
+| `flock_detector.py` | Benn Jordan | Complete - ESP32 integration for Flock Safety ALPR detection |
+| `imsi_detector.py` | Benn Jordan | Complete - HackRF + kalibrate-hackrf for Stingray detection |
+| `BENN_JORDAN_GADGETS.md` | Benn Jordan | 61KB comprehensive guide in `pentest/` directory |
+
+### New Modules to Create
+
+#### 1. Context Engine (`context_engine.py`)
+**Purpose**: Enrich CYT alerts with situational awareness data
+**Data Sources**:
+- DeFlock API - 12,000+ crowdsourced ALPR camera locations
+- Airplanes.live API - Unfiltered aircraft tracking (surveillance planes)
+- Power grid status APIs
+- Weather and atmospheric data
+
+#### 2. Aircraft Correlator (`aircraft_monitor.py`)
+**Purpose**: Detect surveillance aircraft patterns
+**Features**:
+- Track N-numbers of known surveillance planes
+- Detect circling/orbiting patterns over your location
+- Alert on persistent aircraft presence
+- Integrate with ADS-B Exchange or Airplanes.live (unfiltered)
+
+#### 3. DeFlock Integration
+**Purpose**: Map nearby ALPR cameras
+**Source**: https://deflock.me - Crowdsourced ALPR mapping
+**Features**:
+- Query cameras within radius of GPS position
+- Overlay on CYT dashboard map
+- Alert when entering high-surveillance zones
+
+#### 4. Signal Analyzer Enhancement
+**Purpose**: Detect anomalous RF patterns
+**Equipment**: RTL-SDR + GSM antenna
+**Capabilities**:
+- Detect IMSI catchers (Stingrays)
+- Identify rogue cell towers
+- GSM band scanning with kalibrate-hackrf
+
+#### 5. Username Investigator (`username_osint.py`)
+**Purpose**: Social media footprint analysis
+**Tool**: WhatsMyName integration
+**Features**:
+- Check username across 600+ platforms
+- Export results to CYT reports
+- Useful for investigating suspicious devices
+
+### Equipment Purchase List
+
+| Item | Purpose | Est. Cost | Priority |
+|------|---------|-----------|----------|
+| ESP32 DevKit | Flock detector firmware | $7 | HIGH |
+| GSM Antenna | IMSI catcher detection | $20 | HIGH |
+| RTL-SDR V3 | RF signal analysis | $40 | MEDIUM |
+| HackRF One | Advanced RF analysis | $350 | LOW (already may have) |
+
+**Total for basic expansion**: ~$67
+
+### Implementation Roadmap
+
+**Phase 1 (Week 1)**: ESP32 + Flock Detection
+- Purchase ESP32 (~$7)
+- Flash with flock-you firmware
+- Test `flock_detector.py` integration
+
+**Phase 2 (Week 2)**: Context Engine - **COMPLETE**
+- [x] Create `context_engine.py` (620+ lines) - COMPLETE
+- [x] Integrate Airplanes.live API - COMPLETE (tested, working)
+- [x] DeFlock API structure - COMPLETE (needs endpoint verification)
+- [x] Wire into main CYT monitor loop - COMPLETE
+- [x] Add config_validator.py schema - COMPLETE
+- [x] Add context_engine section to config.json - COMPLETE
+
+**Phase 3 (Week 3)**: Dashboard Enhancement
+- Add ALPR camera overlay to map
+- Add aircraft tracking overlay
+- Context panel for environmental data
+
+**Phase 4 (Week 4)**: IMSI Detection
+- Test `imsi_detector.py` with GSM antenna
+- Validate against known cell towers
+- Tune false positive thresholds
+
+**Phase 5 (Week 5)**: Integration & Polish
+- Connect all modules to AlertManager
+- Create unified threat score
+- Document operational procedures
+
+### Reference Resources
+- **Benn Jordan YouTube**: Flock Safety, Stingray detection, Meshtastic privacy
+- **Civil Defense Engineer**: OSINT tools, aircraft tracking, surveillance awareness
+- **DeFlock**: https://deflock.me (ALPR camera crowdsourcing)
+- **ADS-B Exchange**: https://adsbexchange.com (unfiltered aircraft)
+- **Airplanes.live**: Alternative unfiltered ADS-B source
+- **WhatsMyName**: https://whatsmyname.app (username enumeration)
+
+---
+
 ## Next Steps
 1. **Use Chrome** to access dashboard and Kismet (Safari won't work)
 2. **Classify your devices** - Update the Apple/Samsung/Amazon aliases to category "mine"
 3. **Add more to ignore list** - Once you identify your devices
 4. **Monitor for drones** - Watch for YELLOW→RED alert transitions
 5. **Fix Safari** (optional) - Disable HTTPS-Only in Safari settings
+6. **Purchase ESP32** (~$7) - Start Flock detector hardware integration
+7. **Create context_engine.py** - Begin DeFlock and aircraft tracking integration
 
 ---
 
-**Last Updated**: 2026-01-28 01:22
+**Last Updated**: 2026-01-28 03:15
+
+---
+
+## Auto-Compaction Marker
+
+**Last Auto-Compaction**: 2026-01-28 02:38
+
+*This marker was automatically added by the PreCompact hook. The content above represents the session state at compaction time. Read this file on session resume to restore context.*
+

@@ -28,6 +28,13 @@ try:
 except ImportError:
     ALERT_MANAGER_AVAILABLE = False
 
+# Try to import Context Engine for situational awareness
+try:
+    from context_engine import ContextEngine
+    CONTEXT_ENGINE_AVAILABLE = True
+except ImportError:
+    CONTEXT_ENGINE_AVAILABLE = False
+
 class CYTMonitorApp:
     """
     Main application class for the CYT monitoring engine.
@@ -42,6 +49,7 @@ class CYTMonitorApp:
         self.secure_monitor = None
         self.health_monitor = None  # Kismet health monitoring
         self.alert_manager = None  # Alert system for health failures
+        self.context_engine = None  # Situational awareness engine
         self.log_file_handle = None # Added to hold the file handle
         self._setup_logging()
 
@@ -160,6 +168,25 @@ class CYTMonitorApp:
             else:
                 logging.info("Kismet health monitoring disabled in config")
 
+            # Initialize Context Engine for situational awareness
+            context_config = self.config.get('context_engine', {})
+            if context_config.get('enabled', False) and CONTEXT_ENGINE_AVAILABLE:
+                logging.info("Initializing Context Engine...")
+                try:
+                    self.context_engine = ContextEngine(
+                        config=self.config,
+                        db_path=context_config.get('database', 'context_data.db')
+                    )
+                    logging.info(f"Context Engine initialized (cameras: {self.context_engine.camera_radius}m, "
+                                f"aircraft: {self.context_engine.aircraft_radius}nm)")
+                except Exception as e:
+                    logging.error(f"Failed to initialize Context Engine: {e}")
+                    self.context_engine = None
+            elif not CONTEXT_ENGINE_AVAILABLE:
+                logging.info("Context Engine module not available")
+            else:
+                logging.info("Context Engine disabled in config")
+
             # Test database connection and initialize tracking lists
             logging.info("Validating database and initializing tracking lists...")
             with SecureKismetDB(self.latest_kismet_db) as db:
@@ -183,11 +210,17 @@ class CYTMonitorApp:
         health_check_interval = self.config.get('kismet_health', {}).get('check_interval_cycles', 5)
         kismet_interface = self.config.get('kismet_health', {}).get('interface', 'wlan0mon')
 
+        # Context engine settings
+        context_check_interval = self.config.get('context_engine', {}).get('poll_interval_seconds', 30)
+        context_cycles = max(1, context_check_interval // check_interval)  # How often to check context
+
         logging.info("Starting secure CYT monitoring loop...")
         print(f"🔒 SECURE MODE: All SQL injection vulnerabilities have been eliminated!")
         print(f"Monitoring every {check_interval} seconds, updating lists every {list_update_interval} cycles")
         if self.health_monitor:
             print(f"⚕️  Kismet health monitoring enabled (checking every {health_check_interval} cycles)")
+        if self.context_engine:
+            print(f"🌐 Context Engine enabled (DeFlock, aircraft tracking)")
         print("Press Control+C to shut down gracefully.")
 
         while True:
@@ -231,6 +264,28 @@ class CYTMonitorApp:
                             logging.warning("No AlertManager - health issue not sent to notifications")
                     else:
                         logging.debug(f"✓ Kismet health check passed | {self.health_monitor.get_status_summary()}")
+
+                # Update Context Engine with situational awareness data
+                if self.context_engine and time_count % context_cycles == 0:
+                    try:
+                        # Get context snapshot (uses GPS position if available)
+                        snapshot = self.context_engine.get_context()
+
+                        if snapshot.surveillance_score > 0:
+                            logging.info(f"🌐 Context: {snapshot.threat_level} threat | "
+                                       f"Cameras: {snapshot.alpr_camera_count}, "
+                                       f"Aircraft: {len(snapshot.nearby_aircraft)} "
+                                       f"({snapshot.surveillance_aircraft_count} surveillance)")
+
+                            # Alert on high context threat
+                            if snapshot.threat_level in ('HIGH', 'CRITICAL') and self.alert_manager:
+                                alert_msg = (f"⚠️ HIGH SURVEILLANCE CONTEXT\n"
+                                           f"Threat: {snapshot.threat_level} ({snapshot.surveillance_score}/100)\n"
+                                           f"ALPR Cameras: {snapshot.alpr_camera_count}\n"
+                                           f"Surveillance Aircraft: {snapshot.surveillance_aircraft_count}")
+                                self.alert_manager.send_alert(alert_msg, priority="high")
+                    except Exception as e:
+                        logging.debug(f"Context engine update skipped: {e}")
 
                 # Archive detections to history database
                 detections = self.secure_monitor.get_and_clear_detections()
