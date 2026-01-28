@@ -20,10 +20,10 @@
     "check_interval": 60,
     "list_update_interval": 5,
     "time_windows": {
-        "recent": 5,
-        "medium": 10,
-        "old": 15,
-        "oldest": 20
+      "recent": 5,
+      "medium": 10,
+      "old": 15,
+      "oldest": 20
     }
   },
   "kismet_health": {
@@ -38,7 +38,7 @@
   "behavioral_drone_detection": {
     "enabled": true,
     "min_appearances": 3,
-    "confidence_threshold": 0.60,
+    "confidence_threshold": 0.6,
     "signal_variance_threshold": 20,
     "rapid_movement_threshold_mps": 15.0,
     "hovering_radius_meters": 50.0,
@@ -59,11 +59,31 @@
     "threshold_dbm": -60,
     "correlation_enabled": true,
     "suspect_frequencies": [
-      {"start": 315, "end": 315, "description": "315 MHz - Key fobs, garage openers"},
-      {"start": 433, "end": 434, "description": "433 MHz - Key fobs, sensors"},
-      {"start": 2400, "end": 2483.5, "description": "WiFi/Video TX"},
-      {"start": 5150, "end": 5850, "description": "5 GHz WiFi/Drones"},
-      {"start": 824, "end": 894, "description": "Cellular uplink (GPS trackers)"}
+      {
+        "start": 315,
+        "end": 315,
+        "description": "315 MHz - Key fobs, garage openers"
+      },
+      {
+        "start": 433,
+        "end": 434,
+        "description": "433 MHz - Key fobs, sensors"
+      },
+      {
+        "start": 2400,
+        "end": 2483.5,
+        "description": "WiFi/Video TX"
+      },
+      {
+        "start": 5150,
+        "end": 5850,
+        "description": "5 GHz WiFi/Drones"
+      },
+      {
+        "start": 824,
+        "end": 894,
+        "description": "Cellular uplink (GPS trackers)"
+      }
     ]
   },
   "flipper_integration": {
@@ -81,5 +101,9 @@
     "poll_interval_seconds": 30,
     "surveillance_alert_threshold": 50,
     "database": "context_data.db"
+  },
+  "wigle": {
+    "api_name": "AID92acbbd2b0e3d786c89352d85292ae07",
+    "api_token": "7c23284b4b29a38397a7104fdada35e9"
   }
 }
