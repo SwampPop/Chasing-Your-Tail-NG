@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CYT Wardrive - Threat Map - 2026-01-28</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        .threat-popup { min-width: 200px; }
+        .threat-popup h3 { margin: 0 0 10px 0; color: #d32f2f; }
+        .threat-popup table { width: 100%; border-collapse: collapse; }
+        .threat-popup td { padding: 3px 5px; border-bottom: 1px solid #eee; }
+        .legend { 
+            background: white; 
+            padding: 10px; 
+            border-radius: 5px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .legend h4 { margin: 0 0 10px 0; }
+        .legend-item { display: flex; align-items: center; margin: 5px 0; }
+        .legend-color { width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // Initialize map centered on detection area
+        var map = L.map('map').setView([29.922, -90.093], 15);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors | CYT Wardrive 2026-01-28'
+        }).addTo(map);
+
+        // Threat data from wardrive - ORIGINAL KISMET COORDINATES
+        // NOTE: These are detection locations (where GPS was), not AP locations
+        // Actual AP location is within ~50-100m of these points
+        var threats = [
+            {
+                mac: "18:A5:FF:B4:DB:FF",
+                ssid: "ClubKatniss",
+                type: "Neighbor Monitoring",
+                lat: 29.921474,
+                lon: -90.093575,
+                color: "#ff9800"
+            },
+            {
+                mac: "34:19:4D:C0:B9:D5",
+                ssid: "ClubKatniss",
+                type: "Neighbor Monitoring",
+                lat: 29.921599,
+                lon: -90.093605,
+                color: "#ff9800"
+            },
+            {
+                mac: "18:A5:FF:B4:DB:FE",
+                ssid: "ClubKatniss",
+                type: "Alert Device",
+                lat: 29.921304,
+                lon: -90.093912,
+                color: "#f44336"
+            },
+            {
+                mac: "C6:4F:D5:D7:3B:41",
+                ssid: "casita",
+                type: "Cox Router Pattern",
+                lat: 29.923647,
+                lon: -90.091861,
+                color: "#ff9800"
+            },
+            {
+                mac: "34:19:4D:C0:B9:D4",
+                ssid: "ClubKatniss",
+                type: "Neighbor Monitoring",
+                lat: 29.921826,
+                lon: -90.093401,
+                color: "#ff9800"
+            }
+        ];
+        
+        // Add threat markers
+        threats.forEach(function(t) {
+            var icon = L.divIcon({
+                className: 'custom-icon',
+                html: '<div style="background-color: ' + t.color + '; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.4);"></div>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+            
+            var marker = L.marker([t.lat, t.lon], {icon: icon}).addTo(map);
+            
+            var popup = '<div class="threat-popup">' +
+                '<h3>' + t.ssid + '</h3>' +
+                '<table>' +
+                '<tr><td><b>MAC:</b></td><td>' + t.mac + '</td></tr>' +
+                '<tr><td><b>Type:</b></td><td>' + t.type + '</td></tr>' +
+                '<tr><td><b>Lat:</b></td><td>' + t.lat.toFixed(6) + '</td></tr>' +
+                '<tr><td><b>Lon:</b></td><td>' + t.lon.toFixed(6) + '</td></tr>' +
+                '</table></div>';
+            
+            marker.bindPopup(popup);
+        });
+        
+        // Add legend
+        var legend = L.control({position: 'bottomright'});
+        legend.onAdd = function(map) {
+            var div = L.DomUtil.create('div', 'legend');
+            div.innerHTML = '<h4>Threat Legend</h4>' +
+                '<div class="legend-item"><div class="legend-color" style="background: #f44336;"></div>Alert Triggered</div>' +
+                '<div class="legend-item"><div class="legend-color" style="background: #ff9800;"></div>Watchlist Target</div>' +
+                '<p style="font-size: 11px; margin-top: 10px; color: #666;"><b>Note:</b> Markers show detection<br>location (where GPS was),<br>not actual AP location.<br>AP is within ~50-100m.</p>';
+            return div;
+        };
+        legend.addTo(map);
+        
+        // Fit bounds to show all markers
+        var bounds = L.latLngBounds(threats.map(t => [t.lat, t.lon]));
+        map.fitBounds(bounds.pad(0.2));
+    </script>
+</body>
+</html>

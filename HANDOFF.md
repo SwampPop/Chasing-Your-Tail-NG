@@ -1,265 +1,354 @@
-# Handoff Document - CYT Operational Setup
+# Handoff Document - CYT Wardrive Success
 
 **Created**: 2026-01-25 13:10
-**Last Updated**: 2026-01-28 10:55
-**Session Duration**: ~7 hours (this session)
+**Last Updated**: 2026-01-28 16:00
+**Session Duration**: ~5 hours (wardriving + analysis + attacker hunter)
 
 ## Goal
-Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detection, including **wardriving capability** with GPS location tagging and lid-closed operation. Continue OSINT investigation to identify the DEAUTHFLOOD attacker.
+Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detection, including **wardriving capability** with GPS location tagging and lid-closed operation.
 
 ---
 
-## Session 2026-01-28 Summary (Latest)
+## Session 2026-01-28 Summary - WARDRIVE COMPLETE ✅
 
-### Wardriving Setup Phase (10:20-10:55)
+### Major Accomplishments
 
-#### What Was Accomplished
-1. **Wardriving Capability Confirmed** - System is ready for wardriving
-2. **Created `wardrive.sh`** - macOS script with lid-close support
-3. **Disabled VM Sleep** - Prevents USB disconnection issues
-4. **GPS Tested** - Working when connected (29°55.17'N, 90°05.71'W, 7 satellites)
-5. **Installed gpsd** - Available on both VM and macOS
-6. **Configured Kismet for GPS** - Added `gps=gpsd:host=localhost,port=2947`
-
-#### Wardriving Questions Answered
-| Question | Answer |
-|----------|--------|
-| Can I wardrive with current setup? | ✅ YES |
-| Need mobile hotspot/internet? | ❌ NO - completely offline |
-| Will GPS track locations? | ✅ YES - tags all networks with lat/lon |
-| Can I close the MacBook lid? | ✅ YES - with `wardrive.sh` (disables sleep) |
-
-#### GPS Issue Discovered
-- **Problem**: GPS has intermittent issues with Parallels USB passthrough
-- **Cause**: VM sleep/lock causes USB disconnects; passthrough is unreliable
-- **Solution In Progress**: Moving gpsd to macOS (more reliable than VM passthrough)
-
-#### Current GPS Status
-- GPS disconnected from VM (per user action)
-- GPS now visible on macOS: `/dev/cu.usbmodem1401`
-- **Next step**: Configure gpsd on macOS and have Kismet connect over network
+1. **GPS Architecture Fixed** - Moved gpsd to macOS for reliable operation
+2. **Lid-Closed Wardriving** - Successfully captured data with MacBook lid closed
+3. **First Wardrive Complete** - 1 hour drive, 5,958 devices captured
+4. **Threat Detection** - 5 watchlist devices found with GPS coordinates
+5. **WiGLE Export Generated** - 3,073 WiFi APs ready for upload
+6. **Threat Map Created** - Interactive HTML map of threat locations
+7. **Casita Investigation** - Revealed C6:4F:D5 OUI is Cox router pattern
+8. **Attacker Hunter Created** - Automated script to detect attackers targeting your networks
 
 ---
 
-## Current State
+## Wardrive Results
 
-### What's Running
-| Component | Status | Details |
-|-----------|--------|---------|
-| Kismet | ✅ Running | 864 devices, 229 APs captured |
-| VM | ✅ Running | Sleep disabled |
-| WiFi Adapter | ✅ Working | Alfa AWUS1900 in monitor mode |
-| Dashboard | ✅ Working | Chrome at localhost:8080 |
-| GPS | ⏳ In Progress | Disconnected from VM, setting up on macOS |
+| Metric | Value |
+|--------|-------|
+| **Duration** | ~1 hour (11:57 - 12:56) |
+| **Total Devices** | 5,958 |
+| **WiFi APs** | 3,194 |
+| **WiFi Clients** | 1,946 |
+| **With GPS Coords** | 3,800 (64%) |
+| **Watchlist Hits** | 5 |
+| **Geographic Range** | ~10km |
 
-### GPS Architecture Change
-**Old (Unreliable)**:
-```
-GPS USB → Parallels VM → gpsd (VM) → Kismet
-         ↑
-    (USB passthrough fails)
-```
-
-**New (More Reliable)**:
-```
-GPS USB → macOS → gpsd (macOS:2947) → VM Network → Kismet
-                  ↑
-            (Native USB, stable)
-```
-
-### Kismet Database Stats
-- **Total Devices**: 864
-- **Access Points**: 229
-- **Database Size**: 165 MB
-- **Location**: `/home/parallels/CYT/logs/kismet/Kismet-20260128-14-32-21-1.kismet`
+### Encryption Breakdown
+| Type | Count |
+|------|-------|
+| WPA2 | 2,468 |
+| WPA3 | 376 |
+| Open | 0 |
+| WEP | 0 |
 
 ---
 
-## Key Files Created This Session
+## Watchlist Threats Detected
 
-| File | Purpose |
-|------|---------|
-| `wardrive.sh` | macOS wardrive script with lid-close support |
-| `start_wardrive.sh` | VM-side wardrive startup (alternative) |
+*Note: Coordinates are detection locations (where GPS was), not actual AP locations. Actual AP is within ~50-100m.*
 
-### wardrive.sh Features
-- Disables macOS sleep (`pmset disablesleep 1`)
-- Checks/starts VM
-- Starts GPS daemon
-- Verifies Kismet running
-- Shows session stats on stop
-- Commands: `./wardrive.sh [start|stop|status]`
+| MAC | Network | Detection Location | Type |
+|-----|---------|-------------------|------|
+| `18:A5:FF:B4:DB:FF` | ClubKatniss | 29.921°N, 90.094°W | Neighbor |
+| `34:19:4D:C0:B9:D5` | ClubKatniss | 29.922°N, 90.094°W | Neighbor |
+| `18:A5:FF:B4:DB:FE` | ClubKatniss | 29.921°N, 90.094°W | Alert |
+| `C6:4F:D5:D7:3B:41` | casita | 29.924°N, 90.092°W | Cox Pattern |
+| `34:19:4D:C0:B9:D4` | ClubKatniss | 29.922°N, 90.093°W | Neighbor |
 
 ---
 
-## Git Status
-```
-Latest commits:
-- 84804b2 - feat: add wardrive scripts with lid-close support
-- 4357ff3 - feat: add signal logger and WiGLE lookup tools
-- 93ae810 - feat: add OSINT correlator for device investigation
-- 32ed262 - feat: add watchlist alerter and sightings API
-```
-**Branch**: main
+## Key Investigation Findings
+
+### C6:4F:D5 OUI Analysis
+- Originally thought to be attacker-specific
+- **Actually**: Standard Cox router MAC pattern
+- Found 30 devices with this OUI during wardrive
+- All legitimate Cox networks (CoxWiFi, Cox Mobile, SETUP-XXXX)
+- Original attacker likely used spoofed MAC mimicking Cox pattern
+- Attacker has probably changed MACs since original attack
+
+### GPS Location Accuracy (Important Lesson)
+- **Map coordinates show detection location** (where YOUR GPS was), NOT actual AP location
+- WiFi signals travel 50-100m through walls
+- Single wardrive pass cannot pinpoint exact AP location
+- Signal strength analysis attempted but showed GPS drift anomalies
+
+**ClubKatniss Signal Strength Data:**
+| MAC | Last Signal | Notes |
+|-----|-------------|-------|
+| 18:A5:FF:B4:DB:FF | -48 dBm | ~20-40m from AP |
+| 18:A5:FF:B4:DB:FE | -44 dBm | Strongest reading |
+| 34:19:4D:C0:B9:D5 | -82 dBm | Weaker signal |
+| 34:19:4D:C0:B9:D4 | -72 dBm | Moderate signal |
+
+**To improve location accuracy:**
+1. Multiple slow passes from different directions
+2. Walk (not drive) around target area
+3. Triangulate using signal strength from multiple points
+4. Use directional antenna for precise bearing
 
 ---
 
-## Commands to Resume
+## Current Architecture (WORKING)
 
-### Complete GPS Setup on macOS (NEXT STEP)
-```bash
-# GPS is now at /dev/cu.usbmodem1401 on macOS
-# Start gpsd on macOS
-sudo /opt/homebrew/opt/gpsd/sbin/gpsd -n /dev/cu.usbmodem1401
-
-# Verify GPS working
-gpspipe -w -n 5
-
-# Configure Kismet to use macOS gpsd (in VM)
-# Edit /etc/kismet/kismet.conf:
-# gps=gpsd:host=10.211.55.2,port=2947
-# (10.211.55.2 is typical Parallels host IP)
+```
+GPS USB → macOS (gpsd :2947) → Network → VM (Kismet)
+                ↑
+          Native USB, stable
 ```
 
-### Start Wardriving (After GPS Setup)
-```bash
-cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/my_projects/0_active_projects/Chasing-Your-Tail-NG
-./wardrive.sh start
-
-# When done:
-./wardrive.sh stop
-```
-
-### Quick System Check
-```bash
-# VM status
-prlctl list -a | grep CYT
-
-# Kismet status
-prlctl exec CYT-Kali "pgrep -a kismet"
-
-# Network count
-prlctl exec CYT-Kali "sqlite3 /home/parallels/CYT/logs/kismet/*.kismet 'SELECT COUNT(*) FROM devices WHERE type LIKE \"%AP%\"'"
-```
+**Why this works:**
+- No USB passthrough instability
+- Kismet connects to gpsd over network (10.211.55.2:2947)
+- GPS config in `/etc/kismet/kismet_site.conf`
 
 ---
 
-## OSINT Investigation (From Earlier)
+## Files Created This Session
 
-### Suspect Devices Watchlist
-```
-MAC                 Alias                    Type
-DC:56:7B:C2:E5:18   SUSPECT-DEAUTH-ATTACKER  Attack Device
-F4:FE:FB:BB:4D:D3   SUSPECT-SAMSUNG-PHONE    Suspect Device (9 sec before)
-5E:7E:B8:79:24:F0   SUSPECT-RANDOMIZED-MAC   Suspect Device
-20:F1:9E:3E:94:47   ATTACKER-HOME-NETWORK    Suspect AP
-C6:4F:D5:DE:3B:42   casita-ATTACK-TARGET     Neighbor AP
-58:D5:0A:A7:5A:A8   casita-CLIENT-VICTIM     Neighbor Client
-```
-
-### Key Finding
-Samsung phone `F4:FE:FB:BB:4D:D3` appeared **9 seconds before** the TP-Link attacker device - likely the attacker's personal phone.
-
-### WiGLE Status
-- Export ready: `~/Desktop/wigle_upload_20260128_1013.csv` (211 networks)
-- Rate limited today - searches available tomorrow
+| File | Location | Purpose |
+|------|----------|---------|
+| `start_wardrive.sh` | CYT project | macOS wardrive startup (disables sleep) |
+| `stop_wardrive.sh` | CYT project | Restores power settings, shows stats |
+| `threat_map_20260128.html` | CYT project | Interactive Leaflet map of threats |
+| `attacker_hunter.py` | VM + macOS | Automated attacker detection script |
+| `wigle_export_20260128.csv` | VM /tmp/ | WiGLE-format export (3,073 APs) |
+| `wardrive_export_20260128_130355.json` | VM /tmp/ | Full Kismet JSON export (88 MB) |
+| `attacker_detections.json` | VM CYT/ | Attacker hunter detection log |
 
 ---
 
-## Next Steps
+## Attacker Hunter
 
-### Immediate (To Complete GPS Setup)
-1. **Start gpsd on macOS**:
-   ```bash
-   sudo /opt/homebrew/opt/gpsd/sbin/gpsd -n /dev/cu.usbmodem1401
-   ```
-2. **Find Parallels host IP** for VM to connect to:
-   ```bash
-   prlctl exec CYT-Kali "ip route | grep default"
-   ```
-3. **Update Kismet GPS config** in VM to point to macOS gpsd
-4. **Test wardrive script**
+Automated script to detect devices targeting your networks (casita, ClubKatniss, casacita).
 
-### Today (After GPS Works)
-1. Run `./wardrive.sh start`
-2. Close lid, put in bag
-3. Drive/walk around neighborhood
-4. Run `./wardrive.sh stop` - see captured networks
-
-### Investigation (Ongoing)
-1. Upload WiGLE file to increase API quota
-2. Physical triangulation with signal logger
-3. WiGLE searches tomorrow (after rate limit resets)
-
----
-
-## Credentials & Keys
-
-| Service | Credentials |
+### What It Detects
+| Pattern | Description |
 |---------|-------------|
-| Kismet UI | `kismet` / `cyt2026` |
-| VM API Key | `4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y` |
-| WiGLE API | `AID92acbbd2b0e3d786c89352d85292ae07` / stored in config.json |
+| **Brief Appearance** | Device seen <5 min then disappears (attack & flee) |
+| **Deauth Source** | Device sending deauth/disassoc frames |
+| **Targeting Networks** | Device probing for casita, ClubKatniss, casacita |
+| **Randomized MAC** | Locally administered address (spoofed) |
+| **No Association** | Probing but never connecting (reconnaissance) |
 
-## User's Network Info (Excluded from WiGLE)
-- SSIDs: "404th technical application gr", "scif access node"
-- Router MACs: `18:A5:FF:B4:DB:FF`, `18:A5:D0:BB:DB:FF`, `6C:55:E8:7A:29:7C`, `6C:55:E8:7A:29:80`
+### How to Run
+```bash
+# In VM terminal
+cd /home/parallels/CYT
+python3 attacker_hunter.py
+
+# Press Ctrl+C to stop - generates final report
+```
+
+### Test Results (60-second scan)
+Found 4 devices probing for ClubKatniss:
+| MAC | Manufacturer | Signal | Flags |
+|-----|--------------|--------|-------|
+| `38:9C:B2:38:26:54` | Apple | -88 dBm | Targeting ClubKatniss |
+| `7E:4F:2B:44:D7:92` | Unknown | -88 dBm | **Randomized MAC** |
+| `A6:E3:67:FF:39:FF` | Unknown | -61 dBm | **Randomized MAC** |
+| `E8:6E:3A:A4:36:19` | Sony | -68 dBm | PlayStation |
+
+### Output Files
+- `attacker_hunt.log` - Running log of all detections
+- `attacker_detections.json` - Full detection data with GPS
+
+### Alerts
+- Audio alert when suspicious device detected
+- Sound: "Suspicious device detected" + system chime
 
 ---
 
-## Technical Notes
+## Commands for Next Session
 
-### GPS Device Locations
-- **On macOS** (current): `/dev/cu.usbmodem1401`
-- **On VM** (when connected): `/dev/ttyACM0`
+### Start Wardriving
+```bash
+# 1. Start gpsd on macOS
+sudo /opt/homebrew/opt/gpsd/sbin/gpsd -n -G /dev/cu.usbmodem1401
 
-### gpsd Locations
-- **macOS**: `/opt/homebrew/opt/gpsd/sbin/gpsd`
-- **VM**: `/usr/sbin/gpsd`
+# 2. Run wardrive script (disables sleep, checks all services)
+cd ~/my_projects/0_active_projects/Chasing-Your-Tail-NG
+./start_wardrive.sh
 
-### VM Sleep Settings (Now Disabled)
-```
-/etc/systemd/logind.conf.d/no-sleep.conf:
-[Login]
-IdleAction=ignore
-IdleActionSec=infinity
-HandleLidSwitch=ignore
+# 3. Close lid and drive!
 ```
 
-### GPS Position (When Working)
+### Stop Wardriving
+```bash
+./stop_wardrive.sh
+
+# Manually restore power settings if needed:
+sudo pmset -b sleep 10
+sudo pmset -b disablesleep 0
+sudo pmset -a displaysleep 10
 ```
-Latitude:   29° 55.168' N
-Longitude:  90° 05.708' W
-Satellites: 7
-HDOP:       1.37 (good accuracy)
+
+### View Threat Map
+```bash
+open ~/my_projects/0_active_projects/Chasing-Your-Tail-NG/threat_map_20260128.html
+```
+
+### Start Dashboard
+```bash
+# 1. Start API server in VM
+prlctl exec CYT-Kali "cd /home/parallels/CYT && python3 api_server.py &"
+
+# 2. Start proxy server on macOS
+cd ~/Library/Mobile\ Documents/com~apple~CloudDocs/my_projects/0_active_projects/Chasing-Your-Tail-NG
+python3 cyt_proxy_server.py &
+
+# 3. Open dashboard
+open http://localhost:8080/
+```
+
+### Dashboard URLs
+| URL | Description |
+|-----|-------------|
+| http://localhost:8080/ | Main dashboard |
+| http://localhost:8080/api/status | API status |
+| http://localhost:8080/api/ao/activity | AO activity |
+| http://10.211.55.10:3000 | Direct VM API |
+| http://localhost:2501 | Kismet Web UI |
+
+### Export for WiGLE
+```bash
+# Export is in VM at: /tmp/wigle_export_20260128.csv
+# Copy to macOS:
+prlctl exec CYT-Kali "cat /tmp/wigle_export_20260128.csv" > wigle_upload.csv
+```
+
+---
+
+## System Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Kismet | ✅ Running | 5,958 devices captured |
+| gpsd (macOS) | ✅ Running | Serving on port 2947 |
+| VM | ✅ Running | CYT-Kali, sleep disabled |
+| WiFi Adapter | ✅ Monitor mode | Alfa AWUS1900 |
+| GPS | ✅ 3D fix | 29.919°N, 90.095°W |
+| Power Settings | ⚠️ Need restore | Run commands below |
+| Threat Map | ✅ Updated | Original Kismet coords |
+| Attacker Hunter | ✅ Ready | Monitors casita, ClubKatniss, casacita |
+| API Server | ✅ Running | VM port 3000 |
+| Proxy Server | ✅ Running | macOS localhost:8080 |
+| Dashboard | ✅ Running | http://localhost:8080/ |
+
+**Restore power settings manually:**
+```bash
+sudo pmset -b sleep 10
+sudo pmset -b disablesleep 0
+sudo pmset -a displaysleep 10
 ```
 
 ---
 
 ## What Worked
-- Wardrive concept validated - all components ready
-- VM sleep disable successful
-- GPS hardware confirmed working (raw NMEA data verified)
-- Kismet GPS configuration added
-- wardrive.sh script created with full start/stop/status
+
+1. **gpsd on macOS** - Eliminated USB passthrough issues
+2. **Network GPS to Kismet** - Reliable over 10.211.55.2:2947
+3. **Battery settings** - `pmset -b sleep 0` prevents lid-close sleep
+4. **Caffeinate** - Extra protection against sleep
+5. **wardrive.sh scripts** - Automate the entire process
+6. **VM sleep disabled** - logind.conf changes persist
 
 ## What Didn't Work
-- Parallels USB passthrough for GPS - intermittent failures
-- gpsd in VM couldn't maintain connection to GPS device
-- VM sleep was causing USB disconnects
 
-## Blockers
-- **GPS on macOS**: Need to complete gpsd setup on macOS side
-- **Kismet network GPS**: Need to configure Kismet to connect to macOS gpsd over network
+1. **USB passthrough for GPS** - Intermittent failures with Parallels
+2. **Kismet database writing** - Not flushing to disk (data in memory)
+3. **Shared folder copy** - Permission issues copying large files
+4. **Precise AP location** - Single wardrive pass only gives detection location, not actual AP position
 
 ---
 
-**Last Updated**: 2026-01-28 10:55
+## Blockers (None Currently)
+
+All major blockers resolved:
+- ~~GPS passthrough~~ → Fixed with macOS gpsd
+- ~~Lid-close sleep~~ → Fixed with pmset settings
+- ~~VM sleep~~ → Fixed with logind.conf
+
+---
+
+## Next Steps
+
+### Immediate
+1. **Restore power settings** - Run the pmset commands in System Status section
+2. **Upload to WiGLE** - Submit the 3,073 network export
+3. **Commit changes** - Git commit the new scripts and map
+
+### Future Wardrives
+1. **Fix Kismet logging** - Ensure data writes to disk, not just memory
+2. **Test longer drives** - Battery life assessment
+3. **Add more watchlist entries** - Based on WiGLE results
+
+### Improving Location Accuracy
+1. **Walk the block** - Slow movement = more data points, finer granularity
+2. **Multiple passes** - Drive/walk from different directions
+3. **Signal strength triangulation** - Plot readings, find peak signal location
+4. **Directional antenna** - Yagi antenna (~$30-50) for precise bearing
+
+### Investigation
+1. **Monitor for deauth attacks** - From ANY source, not just known MACs
+2. **WiGLE searches** - Look up suspicious networks
+3. **Cross-reference WiGLE** - Check if ClubKatniss appears in WiGLE database with better location
+
+---
+
+## Credentials (Reference)
+
+| Service | Details |
+|---------|---------|
+| Kismet UI | `kismet` / `cyt2026` |
+| WiGLE API | Stored in config.json |
+| gpsd port | 2947 (macOS serves to VM) |
+
+---
+
+## Technical Notes
+
+### GPS Locations
+- **macOS device**: `/dev/cu.usbmodem1401`
+- **gpsd path**: `/opt/homebrew/opt/gpsd/sbin/gpsd`
+- **VM connects to**: `10.211.55.2:2947`
+
+### Kismet GPS Config
+```
+# /etc/kismet/kismet_site.conf
+gps=gpsd:host=10.211.55.2,port=2947
+```
+
+### Power Settings for Wardriving
+```bash
+# Disable sleep (battery)
+sudo pmset -b sleep 0
+sudo pmset -b disablesleep 1
+sudo pmset -a displaysleep 0
+
+# Restore after
+sudo pmset -b sleep 10
+sudo pmset -b disablesleep 0
+sudo pmset -a displaysleep 10
+```
+
+---
+
+**Session Status**: Full system operational - wardrive, attacker hunter, dashboard all running
+**Next Action**: Restore power settings, monitor for threats
+
+---
+
+*Last Updated: 2026-01-28 16:10*
 
 ---
 
 ## Auto-Compaction Marker
 
-**Last Auto-Compaction**: 2026-01-28 10:16
+**Last Manual Update**: 2026-01-28 16:10
 
-*This marker was automatically added by the PreCompact hook. The content above represents the session state at compaction time. Read this file on session resume to restore context.*
+*Dashboard and API servers started. Full monitoring stack operational: Kismet + API + Proxy + Dashboard + Attacker Hunter.*
+
