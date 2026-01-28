@@ -385,12 +385,12 @@ def _classify_appearance_pattern(apps_per_hour: float) -> str:
 
 @app.route('/')
 def index():
-    return send_from_directory(STATIC_DIR, 'dashboard_ao.html')
+    return send_from_directory(STATIC_DIR, 'dashboard.html')
 
 
 @app.route('/dashboard.html')
 def dashboard():
-    return send_from_directory(STATIC_DIR, 'dashboard_ao.html')
+    return send_from_directory(STATIC_DIR, 'dashboard.html')
 
 
 @app.route('/dashboard_local.html')
@@ -460,6 +460,10 @@ def proxy_api(endpoint):
         return ao_regulars()
     elif endpoint == 'ao/summary':
         return ao_summary()
+    elif endpoint == 'attacks':
+        return get_attacks()
+    elif endpoint == 'watchlist':
+        return get_watchlist()
 
     # Proxy to VM
     try:
@@ -614,6 +618,160 @@ def delete_alias(mac):
         save_aliases()
         return jsonify({'success': True, 'mac': mac_upper})
     return jsonify({'error': 'Alias not found'}), 404
+
+
+# ============ Attack Monitoring Endpoints ============
+
+# Attack types and their severity levels
+ATTACK_TYPES = {
+    'DEAUTHFLOOD': {'severity': 'critical', 'description': 'Deauthentication flood attack'},
+    'DISASSOCFLOOD': {'severity': 'critical', 'description': 'Disassociation flood attack'},
+    'DEAUTHCODEINVALID': {'severity': 'high', 'description': 'Invalid deauth reason code'},
+    'DISCONCODEINVALID': {'severity': 'medium', 'description': 'Invalid disconnection code'},
+    'BSSTIMESTAMP': {'severity': 'medium', 'description': 'BSS timestamp anomaly'},
+    'PROBECHANNEL': {'severity': 'low', 'description': 'Probe on wrong channel'},
+    'APSPOOF': {'severity': 'critical', 'description': 'Access point spoofing detected'},
+    'WEPCRACK': {'severity': 'critical', 'description': 'WEP cracking attempt'},
+    'WPSBRUTE': {'severity': 'high', 'description': 'WPS brute force attack'},
+}
+
+ACTIVE_ATTACK_WINDOW = 300  # 5 minutes - considered "active"
+RECENT_ATTACK_WINDOW = 3600  # 1 hour - considered "recent"
+
+
+@app.route('/api/attacks', methods=['GET'])
+def get_attacks():
+    """Get attack information including active attacks, recent attacks, and known threat actors."""
+    import sqlite3
+
+    kismet_db = get_latest_kismet_db()
+    current_time = time.time()
+
+    active_attacks = []
+    recent_attacks = []
+
+    if kismet_db:
+        # Query for recent alerts from Kismet
+        query = f"""
+        sqlite3 'file:{kismet_db}?mode=ro' "
+        SELECT ts_sec, devmac, header, aux
+        FROM alerts
+        WHERE ts_sec > {int(current_time - RECENT_ATTACK_WINDOW)}
+        ORDER BY ts_sec DESC
+        LIMIT 100
+        " 2>/dev/null
+        """
+        output = vm_exec(query.strip(), timeout=15)
+
+        if output and not output.startswith("ERROR"):
+            for line in output.split('\n'):
+                if '|' in line:
+                    parts = line.split('|')
+                    if len(parts) >= 3:
+                        ts = int(parts[0]) if parts[0] else 0
+                        mac = parts[1] if parts[1] else 'UNKNOWN'
+                        header = parts[2] if parts[2] else 'UNKNOWN'
+                        aux = parts[3] if len(parts) > 3 else ''
+
+                        attack_info = ATTACK_TYPES.get(header, {'severity': 'unknown', 'description': header})
+                        age_seconds = current_time - ts
+
+                        attack_entry = {
+                            'timestamp': ts,
+                            'time_str': datetime.fromtimestamp(ts).strftime('%H:%M:%S'),
+                            'time_ago': format_time_ago(age_seconds),
+                            'mac': mac,
+                            'type': header,
+                            'severity': attack_info['severity'],
+                            'description': attack_info['description'],
+                            'details': aux,
+                            'vendor': lookup_vendor(mac) if mac != 'UNKNOWN' else None
+                        }
+
+                        if age_seconds <= ACTIVE_ATTACK_WINDOW:
+                            active_attacks.append(attack_entry)
+                        else:
+                            recent_attacks.append(attack_entry)
+
+    # Get known threat actors from watchlist
+    watchlist_db = os.path.join(STATIC_DIR, 'watchlist.db')
+    threat_actors = []
+
+    if os.path.exists(watchlist_db):
+        try:
+            conn = sqlite3.connect(watchlist_db)
+            cur = conn.cursor()
+            cur.execute('SELECT mac, ssid, reason FROM watchlist')
+
+            for row in cur.fetchall():
+                mac, ssid, reason = row
+                reason_lower = reason.lower() if reason else ''
+                ssid_lower = ssid.lower() if ssid else ''
+
+                # Only include actual threat actors
+                is_attacker = any(kw in reason_lower for kw in
+                    ['deauthflood', 'flood source', 'spoof', 'malicious', 'attacker', 'suspect'])
+                is_attacker = is_attacker or 'attacker' in ssid_lower
+
+                is_protective = 'your network' in reason_lower or 'your router' in reason_lower
+
+                if is_attacker and not is_protective:
+                    threat_actors.append({
+                        'mac': mac.upper(),
+                        'ssid': ssid,
+                        'reason': reason,
+                        'vendor': lookup_vendor(mac)
+                    })
+
+            conn.close()
+        except Exception as e:
+            logger.error(f'Error reading watchlist for attacks: {e}')
+
+    # Aggregate attack statistics
+    attack_macs = set()
+    attack_types_seen = {}
+    for attack in active_attacks + recent_attacks:
+        attack_macs.add(attack['mac'])
+        attack_type = attack['type']
+        attack_types_seen[attack_type] = attack_types_seen.get(attack_type, 0) + 1
+
+    # Determine overall threat status
+    if active_attacks and any(a['severity'] == 'critical' for a in active_attacks):
+        threat_status = 'ACTIVE_CRITICAL'
+    elif active_attacks:
+        threat_status = 'ACTIVE'
+    elif recent_attacks and any(a['severity'] == 'critical' for a in recent_attacks):
+        threat_status = 'RECENT_CRITICAL'
+    elif recent_attacks:
+        threat_status = 'RECENT'
+    else:
+        threat_status = 'CLEAR'
+
+    return jsonify({
+        'timestamp': datetime.now().isoformat(),
+        'threat_status': threat_status,
+        'active_attacks': active_attacks,
+        'active_count': len(active_attacks),
+        'recent_attacks': recent_attacks[:20],  # Limit to 20 most recent
+        'recent_count': len(recent_attacks),
+        'unique_attackers': len(attack_macs),
+        'attack_types': attack_types_seen,
+        'threat_actors': threat_actors,
+        'windows': {
+            'active_minutes': ACTIVE_ATTACK_WINDOW // 60,
+            'recent_minutes': RECENT_ATTACK_WINDOW // 60
+        }
+    })
+
+
+def format_time_ago(seconds: float) -> str:
+    """Format seconds into human-readable time ago string."""
+    if seconds < 60:
+        return f"{int(seconds)}s ago"
+    elif seconds < 3600:
+        return f"{int(seconds // 60)}m ago"
+    else:
+        return f"{int(seconds // 3600)}h {int((seconds % 3600) // 60)}m ago"
 
 
 @app.route('/api/watchlist', methods=['GET'])
