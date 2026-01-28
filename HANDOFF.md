@@ -1,188 +1,209 @@
 # Handoff Document - CYT Operational Setup
 
 **Created**: 2026-01-25 13:10
-**Last Updated**: 2026-01-25 14:00
-**Session Duration**: ~90 minutes
+**Last Updated**: 2026-01-28 01:22
+**Session Duration**: ~45 minutes (this session)
 
 ## Goal
 Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detection, including the web dashboard viewable from macOS, with systematic device identification and threat assessment capabilities.
 
-## Progress Summary
-- ✅ CYT-Kali VM running (up 18+ hours)
-- ✅ Enabled monitor mode on wlan0 (Alfa AWUS1900)
-- ✅ Started Kismet - capturing 245+ devices
-- ✅ Converted ignore lists from JSON to TXT format
-- ✅ Updated config.json kismet_logs path
-- ✅ Started CYT monitoring daemon
-- ✅ Created CORS-enabled API server (`cyt_api_cors.py`)
-- ✅ Created macOS proxy server (`cyt_proxy_server.py`)
-- ✅ Dashboard fully operational at `http://localhost:8080/`
-- ✅ Added 22 infrastructure devices to ignore list (now 58 MACs total)
-- ✅ Investigated all suspicious devices (all LOW THREAT)
-- ✅ Installed `mac-vendor-lookup` library on macOS
-- ✅ Created `DEVICE_IDENTIFICATION_GUIDE.md` with methodology
+## Session 2026-01-28 Summary
+
+### What Was Done
+- Started CYT system from cold start (VM was running but services stopped)
+- Configured Kismet HTTP credentials (username: `kismet`, password: `cyt2026`)
+- Added 23 device aliases with vendor identification
+- Added Kismet reverse proxy route to cyt_proxy_server.py (partial - WebSocket issues)
+- Diagnosed USB WiFi adapter disconnect issue and reconnected
+- Discovered Safari HTTPS-Only mode blocking HTTP URLs
+
+### Current Blockers
+1. **Safari HTTPS-Only Mode**: Safari blocks `http://` URLs including Kismet and Dashboard
+   - **Workaround**: Use Chrome or Firefox instead
+   - **Fix**: Safari Settings → Privacy → Uncheck "HTTPS-Only Mode"
+
+2. **USB Adapter Disconnects**: The Alfa AWUS1900 occasionally disconnects from VM
+   - **Fix**: Run `prlctl set CYT-Kali --device-connect "802.11ac NIC"`
+   - Then re-enable monitor mode and restart Kismet
 
 ## Current State
 
 ### What's Working
-- **Kismet**: Running, capturing 245+ devices
-- **CYT Monitor**: Running in background, tracking device persistence
-- **API Server**: Running on `http://10.211.55.10:3000`
-- **Proxy Server**: Running on macOS `http://localhost:8080`
-- **Dashboard**: Fully operational, auto-refreshes every 10 seconds
+- **Kismet**: Running (PID 46302), capturing 275+ devices
+- **Kismet Credentials**: `kismet` / `cyt2026`
+- **CYT Monitor**: Running (PID 51430)
+- **API Server (VM)**: Running on `http://10.211.55.10:3000`
+- **Proxy Server (macOS)**: Running on `http://localhost:8080` (PID 52487)
+- **Dashboard API**: Responding correctly (YELLOW alert, 275 devices)
+- **Device Aliases**: 24 devices identified with vendor info
 - **Alert Level**: YELLOW (high device count, no drones detected)
-- **Ignore List**: 58 MACs (infrastructure filtered out)
-- **OUI Lookup**: `mac-vendor-lookup` library installed and tested
+
+### What's NOT Working
+- **Safari**: Blocks HTTP URLs due to HTTPS-Only mode
+- **Kismet UI via Proxy**: WebSocket connections fail through reverse proxy
 
 ### VM Details
 - **VM Name**: CYT-Kali
-- **VM IP**: 10.211.55.10 (also 10.211.55.11)
+- **VM IP**: 10.211.55.10
 - **User**: root (running as)
 - **CYT Directory**: `/home/parallels/CYT/`
 - **Kismet Logs**: `/home/parallels/CYT/logs/kismet/`
-- **Current DB**: `Kismet-20260125-18-52-00-1.kismet` (~100MB)
+- **Kismet Credentials**: Stored in `/root/.kismet/kismet_httpd.conf`
 
-## What Worked
-- **Proxy server pattern**: Serves dashboard locally, proxies API to VM - bypasses CORS
-- **prlctl exec**: Running VM commands from macOS terminal
-- **mac-vendor-lookup**: Offline OUI lookup with auto-update capability
-- **Infrastructure ignore list**: Filtering out known Vantiva, HUMAX, Arcadyan devices
-- **Device investigation**: Using Kismet DB to see what networks devices connect to
+## Device Aliases Added (23 devices)
 
-## What Didn't Work
-- **file:// + CORS**: Browser blocks cross-origin requests from file:// protocol
-- **Direct VM access from browser**: Works with curl but not browser (intermittent)
-- **VM IP stability**: DHCP gave VM new IP, had to renew lease
+### Personal Devices (category: unknown - needs user classification)
+| MAC | Name | Vendor |
+|-----|------|--------|
+| 9C:3E:53:3D:71:A0 | Apple Device 1 | Apple, Inc. |
+| 6C:40:08:9D:BD:BC | Apple Device 2 | Apple, Inc. |
+| 00:7C:2D:7D:22:93 | Samsung Device 1 | Samsung Electronics |
+| 20:15:DE:40:38:08 | Samsung Device 2 | Samsung Electronics |
+| D8:BE:65:60:E7:58 | Amazon Device 1 | Amazon Technologies |
+| 18:48:BE:E1:3C:F5 | Amazon Device 2 | Amazon Technologies |
+| 08:12:A5:D7:50:C1 | Amazon Device 3 | Amazon Technologies |
+| A0:6A:44:78:E9:56 | Vizio Smart TV | Vizio, Inc |
+| 78:80:38:26:C2:DA | Funai TV | FUNAI ELECTRIC |
+| D0:3F:27:74:79:53 | Wyze Device | Wyze Labs Inc |
+| C0:49:EF:14:F0:EC | IoT Device (ESP32) | Espressif Inc. |
 
-## Device Investigation Results
+### Infrastructure (category: infrastructure)
+| MAC | Name | Vendor |
+|-----|------|--------|
+| C4:4F:D5:D6:3B:40 | Vantiva Equipment | Vantiva Connected Home |
+| 40:75:C3:CA:62:FA | Vantiva Equipment 2 | Vantiva USA LLC |
+| D0:FC:D0:8D:BD:11 | HUMAX Modem | HUMAX Co., Ltd. |
+| 08:A7:C0:1F:98:A0 | Vantiva Router | Vantiva USA LLC |
+| 54:A6:5C:B3:2F:45 | Vantiva Router 2 | Vantiva USA LLC |
+| D0:FC:D0:8D:BD:18 | HUMAX Router | HUMAX Co., Ltd. |
 
-### Infrastructure Added to Ignore List (22 devices)
-| Vendor | Count | OUI Prefixes |
-|--------|-------|--------------|
-| Vantiva (Cable) | 12 | 6C:55:E8 |
-| HUMAX Networks | 4 | A8:40:F8 |
-| Arcadyan (ISP) | 5 | 18:A5:FF, 18:A5:D0, 18:A5:B7 |
-| GE Lighting | 1 | 78:6D:EB |
-
-### Suspicious Devices Investigated (All LOW THREAT)
-| MAC | Type | Signal | Connected To | Assessment |
-|-----|------|--------|--------------|------------|
-| 5C:E7:53:4E:15:51 | PRIVATE OUI | -50 dBm | Arcadyan Router | Neighbor device |
-| B6:EC:31:82:8F:A2 | Randomized | -34 dBm | Vantiva Cable | Neighbor's phone |
-| 46:94:29:8B:98:96 | Randomized | -41 dBm | Vantiva Cable | Neighbor's device |
-
-## Key Files
-
-### Created This Session
-| File | Description |
-|------|-------------|
-| `cyt_proxy_server.py` | macOS proxy server for dashboard |
-| `dashboard_local.html` | Dashboard using local proxy endpoints |
-| `DEVICE_IDENTIFICATION_GUIDE.md` | Methodology for device identification |
-
-### Modified This Session
-| File | Description |
-|------|-------------|
-| `/home/parallels/CYT/ignore_lists/mac_list.txt` | Added 22 infrastructure MACs with comments |
-| `HANDOFF.md` | This file |
-
-### Important Locations
-| Path | Description |
-|------|-------------|
-| `/home/parallels/CYT/` | CYT installation in VM |
-| `/home/parallels/CYT/logs/kismet/` | Kismet database files |
-| `/tmp/cyt_output.log` | CYT monitor output log |
-| `/tmp/cyt_api.log` | API server log |
+### Neighbor Devices (category: neighbor)
+| MAC | Name | Vendor |
+|-----|------|--------|
+| D0:16:7C:02:93:6C | Neighbor eero 1 | eero inc. |
+| B4:20:46:A6:2C:43 | Neighbor eero 2 | eero inc. |
+| 58:11:22:1D:68:54 | ASUS Router | ASUSTek COMPUTER |
+| 34:19:4D:BE:D5:89 | Arcadyan Router | Arcadyan Corporation |
+| FC:12:63:89:E6:82 | ASKEY Router | ASKEY COMPUTER CORP |
+| 1C:BF:CE:39:B1:84 | Generic Router | Shenzhen Century Xinyang |
 
 ## Commands to Resume
+
+### Quick Start (Use Chrome, not Safari!)
+```bash
+# 1. Start proxy server (if not running)
+cd /Users/thomaslavoie/my_projects/0_active_projects/Chasing-Your-Tail-NG
+export CYT_VM_API_KEY="4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y"
+python3 cyt_proxy_server.py &
+
+# 2. Open dashboard in Chrome
+open -a "Google Chrome" "http://localhost:8080/"
+
+# 3. Open Kismet in Chrome (login: kismet / cyt2026)
+open -a "Google Chrome" "http://10.211.55.10:2501/"
+```
 
 ### Check Status
 ```bash
 # Check all processes
 prlctl exec CYT-Kali "pgrep -a kismet; pgrep -a python"
 
-# Test API directly
-curl -s -H "X-API-Key: 4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y" http://10.211.55.10:3000/status | python3 -m json.tool
+# Test API
+curl -s http://localhost:8080/api/status | python3 -c "import sys,json;d=json.load(sys.stdin);print(f'Alert: {d[\"alert_level\"]}, Devices: {d[\"traffic_5m\"]}')"
 
-# Check device count
-prlctl exec CYT-Kali "sqlite3 /home/parallels/CYT/logs/kismet/*.kismet 'SELECT COUNT(*) FROM devices'"
-
-# Quick status summary
-curl -s http://localhost:8080/api/status | python3 -c "import sys,json;d=json.load(sys.stdin);print(f'Alert: {d[\"alert_level\"]}, Devices: {d[\"traffic_5m\"]}, Drones: {d[\"drones_detected\"]}')"
+# Test Kismet
+curl -s -u kismet:cyt2026 http://10.211.55.10:2501/system/status.json | python3 -c "import sys,json;d=json.load(sys.stdin);print(f'Kismet Devices: {d[\"kismet.system.devices.count\"]}')"
 ```
 
-### Start Services (If Stopped)
+### If USB Adapter Disconnects
 ```bash
+# Reconnect adapter
+prlctl set CYT-Kali --device-connect "802.11ac NIC"
+sleep 2
+
+# Re-enable monitor mode
+prlctl exec CYT-Kali "sudo ip link set wlan0 down && sudo iw dev wlan0 set type monitor && sudo ip link set wlan0 up"
+
+# Restart Kismet
+prlctl exec CYT-Kali "sudo killall kismet; cd /home/parallels/CYT && sudo ./start_kismet_clean.sh wlan0"
+
+# Restart CYT processes
+prlctl exec CYT-Kali "pkill -f python3; cd /home/parallels/CYT && nohup python3 chasing_your_tail.py > /tmp/cyt.log 2>&1 & nohup python3 cyt_api_cors.py > /tmp/api.log 2>&1 &"
+```
+
+### Full Restart (If Everything Broken)
+```bash
+# Stop everything
+prlctl exec CYT-Kali "sudo killall -9 kismet python3 2>/dev/null"
+pkill -f cyt_proxy_server
+
+# Reconnect USB
+prlctl set CYT-Kali --device-connect "802.11ac NIC"
+sleep 2
+
 # Enable monitor mode
-prlctl exec CYT-Kali "ip link set wlan0 down && iw dev wlan0 set type monitor && ip link set wlan0 up"
+prlctl exec CYT-Kali "sudo ip link set wlan0 down && sudo iw dev wlan0 set type monitor && sudo ip link set wlan0 up"
 
 # Start Kismet
-prlctl exec CYT-Kali "cd /home/parallels/CYT && ./start_kismet_clean.sh wlan0"
+prlctl exec CYT-Kali "cd /home/parallels/CYT && sudo ./start_kismet_clean.sh wlan0"
+sleep 3
 
-# Start CYT monitor
-prlctl exec CYT-Kali "cd /home/parallels/CYT && export CYT_TEST_MODE=true && nohup python3 chasing_your_tail.py > /tmp/cyt_output.log 2>&1 &"
+# Start CYT
+prlctl exec CYT-Kali "cd /home/parallels/CYT && nohup python3 chasing_your_tail.py > /tmp/cyt.log 2>&1 &"
+prlctl exec CYT-Kali "cd /home/parallels/CYT && nohup python3 cyt_api_cors.py > /tmp/api.log 2>&1 &"
+sleep 2
 
-# Start API server (VM)
-prlctl exec CYT-Kali "cd /home/parallels/CYT && nohup python3 cyt_api_cors.py > /tmp/cyt_api.log 2>&1 &"
-
-# Start proxy server (macOS)
+# Start proxy
 cd /Users/thomaslavoie/my_projects/0_active_projects/Chasing-Your-Tail-NG
-python3 cyt_proxy_server.py
-```
-
-### View Dashboard
-```bash
-# Start proxy server and open dashboard
-cd /Users/thomaslavoie/my_projects/0_active_projects/Chasing-Your-Tail-NG
+export CYT_VM_API_KEY="4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y"
 python3 cyt_proxy_server.py &
-open http://localhost:8080/
-```
 
-### Device Investigation
-```bash
-# Lookup MAC vendor
-python3 -c "from mac_vendor_lookup import MacLookup; print(MacLookup().lookup('A8:40:F8:E9:DC:A4'))"
-
-# Query device details from Kismet
-prlctl exec CYT-Kali "sqlite3 /home/parallels/CYT/logs/kismet/*.kismet 'SELECT devmac, type, strongest_signal FROM devices WHERE devmac LIKE \"XX:XX:XX%\"'"
-
-# Check what network a device is connected to
-prlctl exec CYT-Kali "sqlite3 /home/parallels/CYT/logs/kismet/*.kismet 'SELECT devmac, substr(device, instr(device, \"last_bssid\")+14, 17) FROM devices WHERE devmac = \"XX:XX:XX:XX:XX:XX\"'"
+# Open in Chrome
+open -a "Google Chrome" "http://localhost:8080/"
 ```
 
 ## Current Metrics (as of handoff)
 - **Alert Level**: YELLOW
-- **Devices (5 min)**: 178
-- **Devices (15 min)**: 245
+- **Devices (5 min)**: 275
+- **Kismet Devices**: 255
 - **Drones Detected**: 0
-- **Close Contacts**: 37 devices
+- **Device Aliases**: 24
 - **Ignore List**: 58 MACs
-- **Threats Identified**: 0 (all investigated devices are normal)
 
-## Tools & Resources Identified
+## Environment Variables
+| Variable | Purpose | Value |
+|----------|---------|-------|
+| `CYT_VM_API_KEY` | Authenticate to VM API | `4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y` |
 
-### OUI Lookup
-- [maclookup.app](https://maclookup.app/) - Free API
-- [Wireshark OUI](https://www.wireshark.org/tools/oui-lookup.html)
-- `mac-vendor-lookup` Python library (installed)
+## Kismet Credentials
+| Setting | Value |
+|---------|-------|
+| Username | `kismet` |
+| Password | `cyt2026` |
+| Config File | `/root/.kismet/kismet_httpd.conf` |
 
-### Drone Detection GitHub Projects
-- [Sentry](https://github.com/connervieira/Sentry) - WiFi drone detection
-- [Sparrow-WiFi](https://github.com/ghostop14/sparrow-wifi) - Advanced WiFi analyzer
-- [RF-Drone-Detection](https://github.com/tesorrells/RF-Drone-Detection) - Passive monitoring
+## Known Issues
 
-### Geolocation
-- [WiGLE](https://wigle.net/) - Wireless network location database
+### Safari HTTPS-Only Mode
+Safari blocks HTTP URLs. Either:
+1. Use Chrome/Firefox instead
+2. Or disable in Safari: Settings → Privacy → Uncheck HTTPS-Only
 
-## API Credentials
-- **API Key**: `4irSMYe38Y-5ONUPhcsPr5MtFx2ViKrkTvhea3YuN9Y`
-- **VM API URL**: `http://10.211.55.10:3000`
-- **Proxy URL**: `http://localhost:8080`
-- **Endpoints**: `/api/status`, `/api/targets`, `/api/health`
+### USB Adapter Disconnects
+The Alfa AWUS1900 occasionally disconnects from the VM. Signs:
+- Kismet stops updating
+- `iwconfig wlan0` shows no signal
+- `dmesg` shows "USB disconnect"
+
+Fix: Reconnect with `prlctl set CYT-Kali --device-connect "802.11ac NIC"`
 
 ## Next Steps
-1. **Monitor** for new unknown devices with strong signals
-2. **Test GPS tracking** by moving around (currently stationary)
-3. **Add more neighbors' devices** to ignore list as identified
-4. **Set up WiGLE account** for geolocation queries
-5. **Consider Sentry integration** for enhanced drone detection
+1. **Use Chrome** to access dashboard and Kismet (Safari won't work)
+2. **Classify your devices** - Update the Apple/Samsung/Amazon aliases to category "mine"
+3. **Add more to ignore list** - Once you identify your devices
+4. **Monitor for drones** - Watch for YELLOW→RED alert transitions
+5. **Fix Safari** (optional) - Disable HTTPS-Only in Safari settings
+
+---
+
+**Last Updated**: 2026-01-28 01:22

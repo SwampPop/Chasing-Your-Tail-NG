@@ -371,6 +371,52 @@ def static_files(filename):
     return send_from_directory(STATIC_DIR, filename)
 
 
+# Kismet UI proxy - reverse proxy to VM's Kismet web interface
+VM_KISMET_URL = os.getenv('CYT_VM_KISMET_URL', 'http://10.211.55.10:2501')
+
+@app.route('/kismet/')
+@app.route('/kismet/<path:subpath>')
+def proxy_kismet(subpath=''):
+    """Proxy requests to Kismet UI on the VM."""
+    try:
+        # Build target URL
+        target_url = f'{VM_KISMET_URL}/{subpath}'
+        if request.query_string:
+            target_url += f'?{request.query_string.decode()}'
+
+        # Forward the request
+        resp = requests.request(
+            method=request.method,
+            url=target_url,
+            headers={key: value for key, value in request.headers if key.lower() != 'host'},
+            data=request.get_data(),
+            cookies=request.cookies,
+            allow_redirects=False,
+            timeout=10
+        )
+
+        # Build response, fixing any absolute URLs in HTML content
+        content = resp.content
+        content_type = resp.headers.get('Content-Type', '')
+
+        if 'text/html' in content_type:
+            # Rewrite absolute URLs to go through proxy
+            content = content.replace(b'href="/', b'href="/kismet/')
+            content = content.replace(b'src="/', b'src="/kismet/')
+            content = content.replace(b"href='/", b"href='/kismet/")
+            content = content.replace(b"src='/", b"src='/kismet/")
+
+        # Build response headers (exclude hop-by-hop headers)
+        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+        headers = [(name, value) for name, value in resp.raw.headers.items()
+                   if name.lower() not in excluded_headers]
+
+        return Response(content, resp.status_code, headers)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Kismet proxy error: {e}")
+        return f"<h1>Cannot connect to Kismet</h1><p>Error: {e}</p><p>VM Kismet URL: {VM_KISMET_URL}</p>", 503
+
+
 # Proxy API endpoints to VM
 @app.route('/api/<path:endpoint>')
 def proxy_api(endpoint):
