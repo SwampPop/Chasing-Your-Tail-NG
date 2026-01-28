@@ -464,6 +464,8 @@ def proxy_api(endpoint):
         return get_attacks()
     elif endpoint == 'watchlist':
         return get_watchlist()
+    elif endpoint == 'watchlist/sightings':
+        return get_watchlist_sightings()
 
     # Proxy to VM
     try:
@@ -823,6 +825,96 @@ def get_watchlist():
     except Exception as e:
         logger.error(f'Watchlist error: {e}')
         return jsonify({'watched_macs': [], 'attacker_macs': [], 'count': 0})
+
+
+@app.route('/api/watchlist/sightings', methods=['GET'])
+def get_watchlist_sightings():
+    """Get real-time sightings of watchlist devices from Kismet."""
+    # Get watchlist from VM
+    watchlist_query = 'sqlite3 /home/parallels/CYT/watchlist.db "SELECT mac, alias, device_type, notes FROM devices"'
+    watchlist_output = vm_exec(watchlist_query, timeout=10)
+
+    if not watchlist_output or watchlist_output.startswith("ERROR"):
+        return jsonify({'sightings': [], 'watchlist_count': 0, 'error': 'Could not read watchlist'})
+
+    # Parse watchlist
+    watchlist = {}
+    for line in watchlist_output.strip().split('\n'):
+        if '|' in line:
+            parts = line.split('|')
+            if len(parts) >= 4:
+                mac = parts[0].upper()
+                watchlist[mac] = {
+                    'alias': parts[1],
+                    'type': parts[2],
+                    'notes': parts[3]
+                }
+
+    if not watchlist:
+        return jsonify({'sightings': [], 'watchlist_count': 0})
+
+    # Get latest Kismet DB and check for watchlist devices
+    kismet_db = get_latest_kismet_db()
+    if not kismet_db:
+        return jsonify({'sightings': [], 'watchlist_count': len(watchlist), 'error': 'No Kismet database'})
+
+    sightings = []
+    current_time = time.time()
+    lookback_seconds = 3600  # Last hour
+
+    for mac, info in watchlist.items():
+        query = f"""
+        sqlite3 'file:{kismet_db}?mode=ro' "
+        SELECT devmac, strongest_signal, first_time, last_time
+        FROM devices
+        WHERE UPPER(devmac) = '{mac}'
+          AND last_time >= {int(current_time - lookback_seconds)}
+        " 2>/dev/null
+        """
+        output = vm_exec(query.strip(), timeout=10)
+
+        if output and not output.startswith("ERROR") and '|' in output:
+            parts = output.split('|')
+            if len(parts) >= 4:
+                last_seen = int(parts[3]) if parts[3] else 0
+                age_seconds = current_time - last_seen
+
+                # Determine proximity from signal
+                signal = int(parts[1]) if parts[1] else -100
+                if signal >= -40:
+                    proximity = "VERY CLOSE (<10m)"
+                elif signal >= -55:
+                    proximity = "CLOSE (10-30m)"
+                elif signal >= -70:
+                    proximity = "NEARBY (30-100m)"
+                else:
+                    proximity = "DISTANT (>100m)"
+
+                sightings.append({
+                    'mac': mac,
+                    'alias': info['alias'],
+                    'type': info['type'],
+                    'signal': signal,
+                    'proximity': proximity,
+                    'first_seen': datetime.fromtimestamp(int(parts[2])).strftime('%H:%M:%S') if parts[2] else None,
+                    'last_seen': datetime.fromtimestamp(last_seen).strftime('%H:%M:%S'),
+                    'age_seconds': int(age_seconds),
+                    'age_str': format_time_ago(age_seconds),
+                    'is_active': age_seconds < 300,  # Seen in last 5 min
+                    'is_attacker': 'Attack' in info['type'] or 'Suspect' in info['type'],
+                    'notes': info['notes'][:100] if info['notes'] else None
+                })
+
+    # Sort by most recently seen, then by danger level
+    sightings.sort(key=lambda x: (not x['is_attacker'], x['age_seconds']))
+
+    return jsonify({
+        'sightings': sightings,
+        'active_count': sum(1 for s in sightings if s['is_active']),
+        'watchlist_count': len(watchlist),
+        'attacker_sightings': sum(1 for s in sightings if s['is_attacker']),
+        'timestamp': datetime.now().strftime('%H:%M:%S')
+    })
 
 
 @app.route('/api/device/<mac>/identify', methods=['GET'])
