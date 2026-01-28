@@ -16,6 +16,144 @@
       "category": "mine",
       "notes": "Main cable modem",
       "added": "2026-01-25T14:05:26.562149"
+    },
+    "9C:3E:53:3D:71:A0": {
+      "name": "Apple Device 1",
+      "category": "unknown",
+      "notes": "iPhone/iPad/Mac - Apple, Inc.",
+      "added": "2026-01-28T00:51:53.342626"
+    },
+    "6C:40:08:9D:BD:BC": {
+      "name": "Apple Device 2",
+      "category": "unknown",
+      "notes": "iPhone/iPad/Mac - Apple, Inc.",
+      "added": "2026-01-28T00:51:53.345153"
+    },
+    "00:7C:2D:7D:22:93": {
+      "name": "Samsung Device 1",
+      "category": "unknown",
+      "notes": "Phone or Smart TV - Samsung Electronics",
+      "added": "2026-01-28T00:51:53.346537"
+    },
+    "20:15:DE:40:38:08": {
+      "name": "Samsung Device 2",
+      "category": "unknown",
+      "notes": "Phone or Smart TV - Samsung Electronics",
+      "added": "2026-01-28T00:51:53.347831"
+    },
+    "D8:BE:65:60:E7:58": {
+      "name": "Amazon Device 1",
+      "category": "unknown",
+      "notes": "Echo/Fire TV - Amazon Technologies Inc.",
+      "added": "2026-01-28T00:51:53.349073"
+    },
+    "18:48:BE:E1:3C:F5": {
+      "name": "Amazon Device 2",
+      "category": "unknown",
+      "notes": "Echo/Fire TV - Amazon Technologies Inc.",
+      "added": "2026-01-28T00:51:53.350399"
+    },
+    "08:12:A5:D7:50:C1": {
+      "name": "Amazon Device 3",
+      "category": "unknown",
+      "notes": "Echo/Fire TV - Amazon Technologies Inc.",
+      "added": "2026-01-28T00:51:53.351644"
+    },
+    "A0:6A:44:78:E9:56": {
+      "name": "Vizio Smart TV",
+      "category": "unknown",
+      "notes": "Smart TV - Vizio, Inc",
+      "added": "2026-01-28T00:51:53.353164"
+    },
+    "78:80:38:26:C2:DA": {
+      "name": "Funai TV",
+      "category": "unknown",
+      "notes": "TV (Philips/Magnavox/Sanyo brand) - FUNAI ELECTRIC",
+      "added": "2026-01-28T00:51:53.354779"
+    },
+    "D0:3F:27:74:79:53": {
+      "name": "Wyze Device",
+      "category": "unknown",
+      "notes": "Camera or smart device - Wyze Labs Inc",
+      "added": "2026-01-28T00:51:53.356184"
+    },
+    "C0:49:EF:14:F0:EC": {
+      "name": "IoT Device (ESP32)",
+      "category": "unknown",
+      "notes": "ESP32/ESP8266 IoT chip - Espressif Inc.",
+      "added": "2026-01-28T00:51:53.357496"
+    },
+    "C4:4F:D5:D6:3B:40": {
+      "name": "Vantiva Equipment",
+      "category": "infrastructure",
+      "notes": "Cable equipment - Vantiva Connected Home",
+      "added": "2026-01-28T00:51:53.359140"
+    },
+    "40:75:C3:CA:62:FA": {
+      "name": "Vantiva Equipment 2",
+      "category": "infrastructure",
+      "notes": "Cable equipment - Vantiva USA LLC",
+      "added": "2026-01-28T00:51:53.360466"
+    },
+    "D0:FC:D0:8D:BD:11": {
+      "name": "HUMAX Modem",
+      "category": "infrastructure",
+      "notes": "Cable modem - HUMAX Co., Ltd.",
+      "added": "2026-01-28T00:51:53.361684"
+    },
+    "D0:16:7C:02:93:6C": {
+      "name": "Neighbor eero 1",
+      "category": "neighbor",
+      "notes": "Mesh WiFi system - eero inc.",
+      "added": "2026-01-28T00:51:53.362888"
+    },
+    "B4:20:46:A6:2C:43": {
+      "name": "Neighbor eero 2",
+      "category": "neighbor",
+      "notes": "Mesh WiFi system - eero inc.",
+      "added": "2026-01-28T00:51:53.363989"
+    },
+    "58:11:22:1D:68:54": {
+      "name": "ASUS Router",
+      "category": "neighbor",
+      "notes": "Consumer router - ASUSTek COMPUTER INC.",
+      "added": "2026-01-28T00:51:53.365082"
+    },
+    "08:A7:C0:1F:98:A0": {
+      "name": "Vantiva Router",
+      "category": "infrastructure",
+      "notes": "ISP router - Vantiva USA LLC",
+      "added": "2026-01-28T00:51:53.366346"
+    },
+    "54:A6:5C:B3:2F:45": {
+      "name": "Vantiva Router 2",
+      "category": "infrastructure",
+      "notes": "ISP equipment - Vantiva USA LLC",
+      "added": "2026-01-28T00:51:53.367630"
+    },
+    "D0:FC:D0:8D:BD:18": {
+      "name": "HUMAX Router",
+      "category": "infrastructure",
+      "notes": "Cable modem router - HUMAX Co., Ltd.",
+      "added": "2026-01-28T00:51:53.368966"
+    },
+    "34:19:4D:BE:D5:89": {
+      "name": "Arcadyan Router",
+      "category": "neighbor",
+      "notes": "ISP router - Arcadyan Corporation",
+      "added": "2026-01-28T00:51:53.370633"
+    },
+    "FC:12:63:89:E6:82": {
+      "name": "ASKEY Router",
+      "category": "neighbor",
+      "notes": "ISP router - ASKEY COMPUTER CORP",
+      "added": "2026-01-28T00:51:53.372184"
+    },
+    "1C:BF:CE:39:B1:84": {
+      "name": "Generic Router",
+      "category": "neighbor",
+      "notes": "Router - Shenzhen Century Xinyang Technology",
+      "added": "2026-01-28T00:51:53.373739"
     }
   }
 }
