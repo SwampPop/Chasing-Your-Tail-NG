@@ -248,6 +248,52 @@ CONFIG_SCHEMA = {
                     "description": "How long to keep device history (hours)"
                 }
             }
+        },
+        "context_engine": {
+            "type": "object",
+            "description": "Situational awareness via DeFlock + aircraft tracking",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Enable context engine"
+                },
+                "deflock_enabled": {
+                    "type": "boolean",
+                    "description": "Enable DeFlock ALPR camera queries"
+                },
+                "aircraft_enabled": {
+                    "type": "boolean",
+                    "description": "Enable aircraft tracking via Airplanes.live"
+                },
+                "camera_radius_meters": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 50000,
+                    "description": "Radius to search for ALPR cameras (meters)"
+                },
+                "aircraft_radius_nm": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 250,
+                    "description": "Radius to search for aircraft (nautical miles)"
+                },
+                "poll_interval_seconds": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 600,
+                    "description": "How often to refresh context data"
+                },
+                "surveillance_alert_threshold": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Threat score threshold for context alerts"
+                },
+                "database": {
+                    "type": "string",
+                    "description": "Path to context database"
+                }
+            }
         }
     }
 }

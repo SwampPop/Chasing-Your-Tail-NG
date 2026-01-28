@@ -71,5 +71,15 @@
     "import_directory": "flipper_imports",
     "auto_import": false,
     "watch_interval_seconds": 60
+  },
+  "context_engine": {
+    "enabled": true,
+    "deflock_enabled": true,
+    "aircraft_enabled": true,
+    "camera_radius_meters": 1000,
+    "aircraft_radius_nm": 10,
+    "poll_interval_seconds": 30,
+    "surveillance_alert_threshold": 50,
+    "database": "context_data.db"
   }
 }
