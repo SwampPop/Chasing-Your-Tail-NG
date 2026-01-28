@@ -616,6 +616,57 @@ def delete_alias(mac):
     return jsonify({'error': 'Alias not found'}), 404
 
 
+@app.route('/api/watchlist', methods=['GET'])
+def get_watchlist():
+    """Get all watchlist entries for dashboard color coding."""
+    import sqlite3
+    watchlist_db = os.path.join(STATIC_DIR, 'watchlist.db')
+
+    if not os.path.exists(watchlist_db):
+        return jsonify({'watched_macs': [], 'attacker_macs': [], 'count': 0})
+
+    try:
+        conn = sqlite3.connect(watchlist_db)
+        cur = conn.cursor()
+        cur.execute('SELECT mac, ssid, reason FROM watchlist')
+
+        watched = []
+        attackers = []
+
+        for row in cur.fetchall():
+            mac, ssid, reason = row
+            entry = {'mac': mac.upper(), 'ssid': ssid, 'reason': reason}
+
+            # Classify as attacker only if explicitly marked as threat
+            reason_lower = reason.lower() if reason else ''
+            ssid_lower = ssid.lower() if ssid else ''
+
+            # Explicit attacker indicators
+            is_attacker = any(kw in reason_lower for kw in ['deauthflood', 'flood source', 'spoof', 'malicious', 'attacker'])
+            is_attacker = is_attacker or 'attacker' in ssid_lower
+
+            # Exclude "monitor for attacks" - that's protective monitoring, not an attacker
+            is_protective = 'your network' in reason_lower or 'your router' in reason_lower or 'neighbor monitoring' in reason_lower or 'victim' in reason_lower
+
+            if is_attacker and not is_protective:
+                attackers.append(entry)
+            else:
+                watched.append(entry)
+
+        conn.close()
+
+        return jsonify({
+            'watched_macs': [e['mac'] for e in watched],
+            'attacker_macs': [e['mac'] for e in attackers],
+            'watched_details': watched,
+            'attacker_details': attackers,
+            'count': len(watched) + len(attackers)
+        })
+    except Exception as e:
+        logger.error(f'Watchlist error: {e}')
+        return jsonify({'watched_macs': [], 'attacker_macs': [], 'count': 0})
+
+
 @app.route('/api/device/<mac>/identify', methods=['GET'])
 @require_api_key
 def identify_device(mac):

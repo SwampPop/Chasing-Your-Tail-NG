@@ -276,6 +276,19 @@
             font-weight: 600;
         }
 
+        .type-watched {
+            background: rgba(249, 115, 22, 0.2);
+            color: #f97316;
+            font-weight: 500;
+        }
+
+        .type-attacker {
+            background: rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+            font-weight: 700;
+            animation: pulse-red 1.5s infinite;
+        }
+
         /* Manufacturer Summary */
         .vendor-summary {
             display: flex;
@@ -574,6 +587,19 @@
             }
         }
 
+        async function fetchWatchlist() {
+            try {
+                const response = await fetch(`${API_URL}/watchlist`, {
+                    headers: { 'X-API-Key': API_KEY }
+                });
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch watchlist:', error);
+                return { watched_macs: [], attacker_macs: [] };
+            }
+        }
+
         function getAlertIcon(level) {
             switch (level) {
                 case 'GREEN': return '✓';
@@ -611,7 +637,7 @@
                 `).join('');
         }
 
-        function renderDashboard(status, targets) {
+        function renderDashboard(status, targets, watchlist = {}) {
             const content = document.getElementById('dashboard-content');
             const connectionStatus = document.getElementById('connection-status');
             const lastUpdate = document.getElementById('last-update');
@@ -702,20 +728,22 @@
                             <span>📶</span>
                         </div>
                         <div class="device-list">
-                            ${renderDeviceList(pins, status.drone_list || [], targets.stalker_macs || [])}
+                            ${renderDeviceList(pins, status.drone_list || [], targets.stalker_macs || [], watchlist)}
                         </div>
                     </div>
                 </div>
             `;
         }
 
-        function renderDeviceList(pins, drones, stalkers) {
+        function renderDeviceList(pins, drones, stalkers, watchlist = {}) {
             if (!pins.length && !drones.length) {
                 return '<div style="color: #666; text-align: center; padding: 20px;">No close contacts detected</div>';
             }
 
             const stalkerSet = new Set(stalkers.map(m => m.toUpperCase()));
             const droneSet = new Set(drones.map(m => m.toUpperCase()));
+            const watchedSet = new Set((watchlist.watched_macs || []).map(m => m.toUpperCase()));
+            const attackerSet = new Set((watchlist.attacker_macs || []).map(m => m.toUpperCase()));
 
             // Combine and deduplicate
             const devices = new Map();
@@ -736,15 +764,24 @@
                 .map(device => {
                     const { vendor, category, isRandomized } = lookupVendor(device.id);
                     const macUpper = device.id.toUpperCase();
-                    const isStalker = stalkerSet.has(macUpper);
+                    const isWatched = watchedSet.has(macUpper);
+                    const isAttacker = attackerSet.has(macUpper);
+                    const isStalker = stalkerSet.has(macUpper) && !isWatched && !isAttacker;
                     const isDrone = droneSet.has(macUpper) || device.type === 'DRONE';
 
                     let typeClass = 'type-close';
                     let typeLabel = 'CLOSE';
 
-                    if (isDrone) {
+                    // Priority: Attacker > Drone > Watched > Stalker > Close
+                    if (isAttacker) {
+                        typeClass = 'type-attacker';
+                        typeLabel = 'THREAT';
+                    } else if (isDrone) {
                         typeClass = 'type-drone';
                         typeLabel = 'DRONE';
+                    } else if (isWatched) {
+                        typeClass = 'type-watched';
+                        typeLabel = 'WATCHED';
                     } else if (isStalker) {
                         typeClass = 'type-stalker';
                         typeLabel = 'STALKER';
@@ -781,11 +818,12 @@
 
         async function updateDashboard() {
             try {
-                const [status, targets] = await Promise.all([
+                const [status, targets, watchlist] = await Promise.all([
                     fetchStatus(),
-                    fetchTargets()
+                    fetchTargets(),
+                    fetchWatchlist()
                 ]);
-                renderDashboard(status, targets);
+                renderDashboard(status, targets, watchlist);
             } catch (error) {
                 renderError(error);
             }
