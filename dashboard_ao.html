@@ -654,6 +654,104 @@
         .type-drone { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
         .type-close { background: rgba(234, 179, 8, 0.2); color: #eab308; }
         .type-stalker { background: rgba(239, 68, 68, 0.3); color: #ef4444; font-weight: 600; }
+        .type-watched { background: rgba(249, 115, 22, 0.2); color: #f97316; font-weight: 500; }
+        .type-attacker { background: rgba(239, 68, 68, 0.4); color: #ef4444; font-weight: 700; animation: pulse-red 1.5s infinite; }
+
+        /* Threat Activity Panel */
+        .threat-card {
+            grid-column: span 2;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        .threat-card.active-threat {
+            border-color: #ef4444;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+        }
+        .threat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .threat-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .threat-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .threat-indicator.clear { background: #22c55e; }
+        .threat-indicator.recent { background: #eab308; }
+        .threat-indicator.active { background: #ef4444; animation: pulse-red 1s infinite; }
+        .threat-status-text {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .threat-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .threat-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .threat-section-title {
+            font-size: 10px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .threat-badge {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 8px;
+            background: rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        .threat-badge.clear { background: rgba(34, 197, 94, 0.3); color: #22c55e; }
+        .threat-badge.warning { background: rgba(234, 179, 8, 0.3); color: #eab308; }
+        .attack-list {
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        .attack-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 4px;
+            margin-bottom: 4px;
+            font-size: 10px;
+            border-left: 2px solid transparent;
+        }
+        .attack-item.critical { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+        .attack-item.high { border-left-color: #f97316; }
+        .attack-item.medium { border-left-color: #eab308; }
+        .attack-type { font-weight: 600; color: #fff; }
+        .attack-mac { font-family: 'SF Mono', Monaco, monospace; color: #888; font-size: 9px; }
+        .attack-time { color: #666; font-size: 9px; }
+        .threat-actor-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 4px;
+            margin-bottom: 4px;
+            border-left: 2px solid #ef4444;
+        }
+        .threat-actor-mac { font-family: 'SF Mono', Monaco, monospace; color: #ef4444; font-size: 10px; font-weight: 600; }
+        .threat-actor-reason { color: #888; font-size: 9px; }
+        .no-threats { text-align: center; color: #555; padding: 12px; font-size: 11px; }
 
         footer {
             text-align: center;
@@ -1114,7 +1212,97 @@
             }
         }
 
-        function renderMainDashboard(status, targets) {
+        function renderThreatPanel(attacks) {
+            const status = attacks.threat_status || 'CLEAR';
+            const activeCount = attacks.active_count || 0;
+            const recentCount = attacks.recent_count || 0;
+            const threatActors = attacks.threat_actors || [];
+
+            let indicatorClass = 'clear';
+            let statusText = 'ALL CLEAR';
+            let statusColor = 'text-green';
+
+            if (status.includes('ACTIVE')) {
+                indicatorClass = 'active';
+                statusText = status.includes('CRITICAL') ? 'ACTIVE ATTACK!' : 'ACTIVE';
+                statusColor = 'text-red';
+            } else if (status.includes('RECENT')) {
+                indicatorClass = 'recent';
+                statusText = 'RECENT ACTIVITY';
+                statusColor = 'text-yellow';
+            }
+
+            const isActiveThreat = status.includes('ACTIVE');
+
+            return `
+                <div class="card threat-card ${isActiveThreat ? 'active-threat' : ''}">
+                    <div class="card-header threat-header">
+                        <span class="card-title">⚠️ Threat Monitor</span>
+                        <div class="threat-status">
+                            <div class="threat-indicator ${indicatorClass}"></div>
+                            <span class="threat-status-text ${statusColor}">${statusText}</span>
+                        </div>
+                    </div>
+                    <div class="threat-content">
+                        <div class="threat-section">
+                            <div class="threat-section-title">
+                                Recent Attacks
+                                <span class="threat-badge ${activeCount > 0 ? '' : recentCount > 0 ? 'warning' : 'clear'}">
+                                    ${activeCount > 0 ? activeCount + ' ACTIVE' : recentCount > 0 ? recentCount : 'None'}
+                                </span>
+                            </div>
+                            <div class="attack-list">
+                                ${renderAttackList(attacks.active_attacks || [], attacks.recent_attacks || [])}
+                            </div>
+                        </div>
+                        <div class="threat-section">
+                            <div class="threat-section-title">
+                                Known Threats
+                                <span class="threat-badge ${threatActors.length > 0 ? '' : 'clear'}">${threatActors.length || 'None'}</span>
+                            </div>
+                            <div class="attack-list">
+                                ${renderThreatActors(threatActors)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAttackList(activeAttacks, recentAttacks) {
+            const allAttacks = [...activeAttacks, ...recentAttacks].slice(0, 8);
+            if (allAttacks.length === 0) {
+                return '<div class="no-threats">✓ No attacks in last hour</div>';
+            }
+            return allAttacks.map((attack, i) => {
+                const isActive = i < activeAttacks.length;
+                return `
+                    <div class="attack-item ${attack.severity}">
+                        <div>
+                            <span class="attack-type">${attack.type}${isActive ? ' 🔴' : ''}</span>
+                            <div class="attack-mac">${attack.mac}</div>
+                        </div>
+                        <span class="attack-time">${attack.time_ago || attack.time_str}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderThreatActors(actors) {
+            if (actors.length === 0) {
+                return '<div class="no-threats">👁️ No known threats on watchlist</div>';
+            }
+            return actors.slice(0, 6).map(actor => `
+                <div class="threat-actor-item">
+                    <div>
+                        <div class="threat-actor-mac">${actor.mac}</div>
+                        <div class="threat-actor-reason">${escapeHtml(actor.reason || actor.ssid)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderMainDashboard(status, targets, attacks = {}) {
             const content = document.getElementById('dashboard-content');
             const connectionStatus = document.getElementById('connection-status');
             const lastUpdate = document.getElementById('last-update');
@@ -1128,6 +1316,9 @@
 
             content.innerHTML = `
                 <div class="grid">
+                    <!-- Threat Activity Panel -->
+                    ${renderThreatPanel(attacks)}
+
                     <div class="card alert-card">
                         <div class="card-header">
                             <span class="card-title">Threat Level</span>
@@ -1303,15 +1494,16 @@
 
         async function updateDashboard() {
             try {
-                const [status, targets, activity, regulars, summary] = await Promise.all([
+                const [status, targets, activity, regulars, summary, attacks] = await Promise.all([
                     fetchData('status'),
                     fetchData('targets').catch(() => ({ stalker_count: 0, stalker_macs: [] })),
                     fetchData('ao/activity'),
                     fetchData('ao/regulars'),
-                    fetchData('ao/summary')
+                    fetchData('ao/summary'),
+                    fetchData('attacks').catch(() => ({ threat_status: 'UNKNOWN', active_attacks: [], recent_attacks: [], threat_actors: [] }))
                 ]);
 
-                renderMainDashboard(status, targets);
+                renderMainDashboard(status, targets, attacks);
                 renderAOPanel(activity, regulars, summary);
             } catch (error) {
                 renderError(error);

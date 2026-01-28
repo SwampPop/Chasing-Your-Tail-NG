@@ -385,12 +385,12 @@ def _classify_appearance_pattern(apps_per_hour: float) -> str:
 
 @app.route('/')
 def index():
-    return send_from_directory(STATIC_DIR, 'dashboard.html')
+    return send_from_directory(STATIC_DIR, 'dashboard_ao.html')
 
 
 @app.route('/dashboard.html')
 def dashboard():
-    return send_from_directory(STATIC_DIR, 'dashboard.html')
+    return send_from_directory(STATIC_DIR, 'dashboard_ao.html')
 
 
 @app.route('/dashboard_local.html')
