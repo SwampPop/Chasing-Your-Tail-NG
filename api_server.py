@@ -130,9 +130,10 @@ def get_status():
             count_5m = len(db.get_mac_addresses_by_time_range(now - 300, now))
             count_15m = len(db.get_mac_addresses_by_time_range(now - 900, now))
 
+            # Threshold: 300 devices/5min (residential baseline ~200)
             status_color = "GREEN"
             if drones: status_color = "RED"
-            elif count_5m > 50: status_color = "YELLOW"
+            elif count_5m > 300: status_color = "YELLOW"
 
             return jsonify({
                 "alert_level": status_color,

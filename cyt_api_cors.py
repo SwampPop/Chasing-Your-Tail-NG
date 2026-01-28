@@ -82,10 +82,11 @@ def status():
             pins = [{'id': row[0], 'signal': row[1]} for row in cur.fetchall()]
 
         # Determine alert level
+        # Threshold: 300 devices/5min (residential baseline ~200)
         alert_level = 'GREEN'
         if drone_count > 0:
             alert_level = 'RED'
-        elif traffic_5m > 50:
+        elif traffic_5m > 300:
             alert_level = 'YELLOW'
 
         conn.close()
