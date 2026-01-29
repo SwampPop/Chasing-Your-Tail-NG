@@ -1,15 +1,15 @@
 # Handoff Document - CYT Wardrive Success
 
 **Created**: 2026-01-25 13:10
-**Last Updated**: 2026-01-29 01:25
-**Session Duration**: ~6 hours (wardriving + analysis + attacker hunter + investigation)
+**Last Updated**: 2026-01-29 09:50
+**Session Duration**: ~8 hours (wardriving + analysis + attacker hunter + security audit)
 
 ## Goal
 Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detection, including **wardriving capability** with GPS location tagging and lid-closed operation.
 
 ---
 
-## Session 2026-01-29 Summary - ATTACKER LOCATED
+## Session 2026-01-29 Summary - ATTACKER LOCATED + SECURITY AUDIT
 
 ### Major Accomplishments
 
@@ -19,6 +19,10 @@ Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detec
 4. **Dashboard Fixed** - Patched VM API to skip auth in dev mode
 5. **All Systems Restarted** - Full monitoring stack operational
 6. **Attacker Hunter Running** - Actively monitoring for threats
+7. **Kismet Alerts Analyzed** - Found WPA exploit attempts on neighbor's network
+8. **New Attacker Added to Watchlist** - CVE exploit attacker targeting "Bryson Family"
+9. **Vulnerable Devices Identified** - 3 IoT devices on your networks at risk
+10. **USB Instability Diagnosed** - Power Nap causing 74 sleep/wake cycles
 
 ### Key Investigation Finding
 
@@ -29,7 +33,38 @@ Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detec
 - **LOCATION**: 29.919369°N, 90.095078°W (nearby neighbor)
 - **ACCOMPLICE**: F4:FE:FB:BB:4D:D3 (Samsung phone, appeared 9 seconds before attack)
 
+### NEW: WPA Exploit Attack on Neighbor
+
+**Target**: "Bryson Family" network (neighbor)
+**Time**: 2026-01-29 02:06:57 CST
+
+| Role | MAC | Details |
+|------|-----|---------|
+| **ATTACKER** | `3A:60:41:53:31:7D` | Randomized MAC, CVE-RTL8195 + CVE-2020-27301 exploits |
+| **VICTIM** | `E6:57:36:EE:D1:1E` | Client on Bryson Family network |
+| **NETWORK** | `18:60:41:53:31:7E` | Bryson Family (5GHz) |
+
+### Vulnerable Devices on YOUR Networks
+
+| MAC | Manufacturer | Network | Risk |
+|-----|--------------|---------|------|
+| `8C:F7:10:F2:AB:30` | AMPAK Technology | casita | RTL exploit vulnerable |
+| `CC:7B:5C:AE:98:14` | Espressif (ESP32) | casita | WPA exploit vulnerable |
+| `A0:A3:B3:0D:F3:D4` | Espressif (ESP32) | SCIF Access Node | WPA exploit vulnerable |
+
+**Device Types**: Likely smart plugs, smart bulbs, or IoT sensors
+
+### USB Instability Fix
+
+Problem: 74 sleep/wake cycles causing Kismet source errors
+```bash
+sudo pmset -a powernap 0
+sudo pmset -a standby 0
+sudo pmset -a hibernatemode 0
+```
+
 ### Commits
+- `133ceb3` - docs: update handoff with attacker investigation findings
 - `6e014a4` - Add attacker home network location to threat map
 
 ---
@@ -100,6 +135,26 @@ Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detec
 | **SUSPECT** | 5E:7E:B8:79:24:F0 | Randomized MAC | Appeared 07:53:15 |
 
 **Attacker Location Found**: 29.919369°N, 90.095078°W (sibling MAC 20:F1:9E:3E:94:46 with SSID "3E9446")
+
+### Wardrive Analysis Summary (2026-01-28)
+
+| Metric | Value |
+|--------|-------|
+| Session Duration | 59 min (11:57-12:56) |
+| Total Devices | 5,958 |
+| WiFi APs | 3,194 |
+| WiFi Clients | 1,946 |
+| GPS Coverage | 64% (3,800 devices) |
+| Watchlist Hits | 5 |
+
+**Security Findings**:
+- WPA2: 2,468 networks
+- WPA3: 376 networks
+- Open/WEP: 0 (neighborhood has solid security)
+
+**Watchlist Detections**:
+- ClubKatniss: 4 BSSIDs found (mesh/multi-AP setup)
+- Strongest signal: -44 dBm (within 20-40m)
 
 ### C6:4F:D5 OUI Analysis
 - Originally thought to be attacker-specific
@@ -378,18 +433,18 @@ sudo pmset -a displaysleep 10
 
 ---
 
-**Session Status**: Full system operational - attacker located, all monitoring active
+**Session Status**: Full system operational - attacker located, wardrive analyzed, all monitoring active
 **Next Action**: Monitor attacker hunter for activity, investigate neighbor at 29.919°N 90.095°W
 
 ---
 
-*Last Updated: 2026-01-29 01:25*
+*Last Updated: 2026-01-29 17:45*
 
 ---
 
 ## Auto-Compaction Marker
 
-**Last Manual Update**: 2026-01-29 01:25
+**Last Manual Update**: 2026-01-29 17:45
 
-*Attacker home network located at 29.919369°N, 90.095078°W. Threat map updated. All systems running: Kismet + API + Proxy + Dashboard + Attacker Hunter.*
+*Wardrive analysis complete: 5,958 devices, 64% GPS coverage, 5 watchlist hits. Attacker home network at 29.919369°N, 90.095078°W. All systems running: Kismet + API + Proxy + Dashboard + Attacker Hunter.*
 
