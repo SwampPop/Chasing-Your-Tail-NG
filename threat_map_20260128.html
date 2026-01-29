@@ -78,6 +78,14 @@
                 lat: 29.921826,
                 lon: -90.093401,
                 color: "#ff9800"
+            },
+            {
+                mac: "20:F1:9E:3E:94:46",
+                ssid: "3E9446 (ATTACKER HOME)",
+                type: "ATTACKER HOME NETWORK",
+                lat: 29.919369,
+                lon: -90.095078,
+                color: "#d32f2f"
             }
         ];
         
@@ -109,6 +117,7 @@
         legend.onAdd = function(map) {
             var div = L.DomUtil.create('div', 'legend');
             div.innerHTML = '<h4>Threat Legend</h4>' +
+                '<div class="legend-item"><div class="legend-color" style="background: #d32f2f;"></div>ATTACKER HOME</div>' +
                 '<div class="legend-item"><div class="legend-color" style="background: #f44336;"></div>Alert Triggered</div>' +
                 '<div class="legend-item"><div class="legend-color" style="background: #ff9800;"></div>Watchlist Target</div>' +
                 '<p style="font-size: 11px; margin-top: 10px; color: #666;"><b>Note:</b> Markers show detection<br>location (where GPS was),<br>not actual AP location.<br>AP is within ~50-100m.</p>';
