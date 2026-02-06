@@ -136,5 +136,60 @@ class SurveillanceDetector:
 
 def load_appearances_from_kismet(db_path: str, detector: SurveillanceDetector,
                                  location_id: str = "unknown") -> int:
-    # ... (function content remains the same)
-    pass
+    """Load device appearances from a Kismet database into the detector.
+
+    Args:
+        db_path: Path to the Kismet SQLite database file.
+        detector: SurveillanceDetector instance to populate.
+        location_id: Location identifier for GPS correlation.
+
+    Returns:
+        Number of device appearances loaded.
+    """
+    from secure_database import SecureKismetDB
+    import time as _time
+
+    count = 0
+    try:
+        with SecureKismetDB(db_path) as db:
+            # Get all devices (no time filter - load entire capture)
+            devices = db.get_devices_by_time_range(0)
+
+            for device in devices:
+                mac = device.get('mac')
+                if not mac:
+                    continue
+
+                timestamp = device.get('last_time', _time.time())
+                device_type = device.get('type')
+
+                # Extract probed SSIDs from device data
+                ssids_probed = []
+                device_data = device.get('device_data')
+                if device_data and isinstance(device_data, dict):
+                    dot11 = device_data.get('dot11.device', {})
+                    if isinstance(dot11, dict):
+                        probe = dot11.get(
+                            'dot11.device.last_probed_ssid_record', {})
+                        if isinstance(probe, dict):
+                            ssid = probe.get('dot11.probedssid.ssid', '')
+                            if ssid:
+                                ssids_probed.append(ssid)
+
+                detector.add_device_appearance(
+                    mac=mac,
+                    timestamp=timestamp,
+                    location_id=location_id,
+                    ssids_probed=ssids_probed,
+                    device_type=device_type
+                )
+                count += 1
+
+        logger.info(
+            f"Loaded {count} device appearances from {db_path} "
+            f"(location: {location_id})")
+    except Exception as e:
+        logger.error(f"Failed to load appearances from {db_path}: {e}")
+        raise
+
+    return count

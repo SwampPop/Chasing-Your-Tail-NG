@@ -102,8 +102,23 @@
     "surveillance_alert_threshold": 50,
     "database": "context_data.db"
   },
+  "alert_settings": {
+    "locations_threshold": 3,
+    "drone_time_window_seconds": 300,
+    "watchlist_time_window_seconds": 300
+  },
+  "ui_settings": {
+    "animation_duration": 0.7,
+    "archive_interval_seconds": 300,
+    "refresh_interval_seconds": 60
+  },
+  "gps_settings": {
+    "location_threshold_meters": 100,
+    "session_timeout_seconds": 600
+  },
   "wigle": {
-    "api_name": "AID92acbbd2b0e3d786c89352d85292ae07",
-    "api_token": "7c23284b4b29a38397a7104fdada35e9"
+    "api_name": "",
+    "api_token": "",
+    "_note": "Migrate to secure_credentials.py: python3 -c \"from secure_credentials import SecureCredentialManager; m=SecureCredentialManager(); m.store_credential('wigle_api_name','YOUR_KEY'); m.store_credential('wigle_api_token','YOUR_TOKEN')\""
   }
 }

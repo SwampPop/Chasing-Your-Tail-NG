@@ -1,5 +1,10 @@
 #:kivy 1.11.1
 
+# =====================================================================
+# CYT - Chasing Your Tail GUI Layout
+# Tabbed interface: Dashboard | Monitor | Watchlist
+# =====================================================================
+
 BoxLayout:
     orientation: 'vertical'
     canvas.before:
@@ -8,49 +13,272 @@ BoxLayout:
         Rectangle:
             pos: self.pos
             size: self.size
-    
+
+    # --- Alert Bar (always visible at top) ---
     Label:
         id: alert_bar
         text: 'STATUS: MONITORING'
-        font_size: '20sp'
-        size_hint_y: 0.1
+        font_size: '18sp'
+        bold: True
+        size_hint_y: None
+        height: 40
         color: app.theme_colors['accent_green']
         canvas.before:
             Color:
-                rgba: app.theme_colors['background'][0] * 1.8, app.theme_colors['background'][1] * 1.8, app.theme_colors['background'][2] * 1.8, 1
+                rgba: 0.08, 0.08, 0.15, 1
             Rectangle:
                 pos: self.pos
                 size: self.size
 
-    BoxLayout:
-        size_hint_y: None
-        height: 40
-        padding: [5, 5, 5, 5]
-        Button:
-            text: "Clear Follower List"
-            on_press: app.clear_follower_list()
+    # --- Tabbed Panel ---
+    TabbedPanel:
+        do_default_tab: False
+        tab_width: self.width / 3
+        tab_height: '36sp'
 
-    ScrollView:
-        canvas.before:
-            Color:
-                rgba: app.theme_colors['background']
-            Rectangle:
-                pos: self.pos
-                size: self.size
-        BoxLayout:
-            id: follower_list
-            orientation: 'vertical'
-            size_hint_y: None
-            height: self.minimum_height
+        # ==================== DASHBOARD TAB ====================
+        TabbedPanelItem:
+            text: 'Dashboard'
+            BoxLayout:
+                orientation: 'vertical'
+                padding: 15
+                spacing: 10
+                canvas.before:
+                    Color:
+                        rgba: app.theme_colors['background']
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
 
+                Label:
+                    text: 'SYSTEM DASHBOARD'
+                    font_size: '22sp'
+                    bold: True
+                    size_hint_y: None
+                    height: 40
+                    color: app.theme_colors['text_primary']
+
+                # Status grid
+                GridLayout:
+                    cols: 2
+                    spacing: 8
+                    size_hint_y: None
+                    height: self.minimum_height
+                    padding: [10, 5]
+
+                    Label:
+                        text: 'Kismet DB:'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: 0.5, 0.6, 0.8, 1
+                        halign: 'right'
+                        text_size: self.size
+
+                    Label:
+                        id: dash_db_file
+                        text: 'Loading...'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: app.theme_colors['text_primary']
+                        halign: 'left'
+                        text_size: self.size
+
+                    Label:
+                        text: 'Connection:'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: 0.5, 0.6, 0.8, 1
+                        halign: 'right'
+                        text_size: self.size
+
+                    Label:
+                        id: dash_db_status
+                        text: '...'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: app.theme_colors['accent_green']
+                        halign: 'left'
+                        text_size: self.size
+
+                    Label:
+                        text: 'Total Devices:'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: 0.5, 0.6, 0.8, 1
+                        halign: 'right'
+                        text_size: self.size
+
+                    Label:
+                        id: dash_device_count
+                        text: '0'
+                        font_size: '14sp'
+                        bold: True
+                        size_hint_y: None
+                        height: 30
+                        color: app.theme_colors['text_primary']
+                        halign: 'left'
+                        text_size: self.size
+
+                    Label:
+                        text: 'Watchlist:'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: 0.5, 0.6, 0.8, 1
+                        halign: 'right'
+                        text_size: self.size
+
+                    Label:
+                        id: dash_watchlist_count
+                        text: '0'
+                        font_size: '14sp'
+                        bold: True
+                        size_hint_y: None
+                        height: 30
+                        color: app.theme_colors['accent_amber']
+                        halign: 'left'
+                        text_size: self.size
+
+                    Label:
+                        text: 'Last Activity:'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: 0.5, 0.6, 0.8, 1
+                        halign: 'right'
+                        text_size: self.size
+
+                    Label:
+                        id: dash_last_seen
+                        text: 'N/A'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: app.theme_colors['text_primary']
+                        halign: 'left'
+                        text_size: self.size
+
+                # Spacer + Run Analysis button
+                Widget:
+                    size_hint_y: 1
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: 44
+                    spacing: 10
+                    padding: [40, 0]
+                    Button:
+                        text: 'Run Deep Analysis'
+                        on_press: app.run_deep_analysis()
+                    Button:
+                        text: 'Refresh Dashboard'
+                        on_press: app.refresh_dashboard()
+
+        # ==================== MONITOR TAB ====================
+        TabbedPanelItem:
+            text: 'Monitor'
+            BoxLayout:
+                orientation: 'vertical'
+                canvas.before:
+                    Color:
+                        rgba: app.theme_colors['background']
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+
+                BoxLayout:
+                    size_hint_y: None
+                    height: 40
+                    padding: [5, 5, 5, 5]
+                    spacing: 5
+                    Button:
+                        text: 'Clear List'
+                        size_hint_x: 0.5
+                        on_press: app.clear_follower_list()
+                    Button:
+                        text: 'Refresh Now'
+                        size_hint_x: 0.5
+                        on_press: app.refresh_follower_list()
+
+                ScrollView:
+                    canvas.before:
+                        Color:
+                            rgba: app.theme_colors['background']
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                    BoxLayout:
+                        id: follower_list
+                        orientation: 'vertical'
+                        size_hint_y: None
+                        height: self.minimum_height
+
+        # ==================== WATCHLIST TAB ====================
+        TabbedPanelItem:
+            text: 'Watchlist'
+            BoxLayout:
+                orientation: 'vertical'
+                canvas.before:
+                    Color:
+                        rgba: app.theme_colors['background']
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+
+                # Add device row
+                BoxLayout:
+                    size_hint_y: None
+                    height: 44
+                    padding: [5, 5, 5, 5]
+                    spacing: 5
+                    TextInput:
+                        id: wl_mac_input
+                        hint_text: 'MAC Address'
+                        multiline: False
+                        size_hint_x: 0.35
+                    TextInput:
+                        id: wl_alias_input
+                        hint_text: 'Alias'
+                        multiline: False
+                        size_hint_x: 0.35
+                    Button:
+                        text: 'Add'
+                        size_hint_x: 0.15
+                        on_press: app.add_to_watchlist(wl_mac_input.text, wl_alias_input.text)
+                    Button:
+                        text: 'Reload'
+                        size_hint_x: 0.15
+                        on_press: app.load_watchlist()
+
+                ScrollView:
+                    canvas.before:
+                        Color:
+                            rgba: app.theme_colors['background']
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                    BoxLayout:
+                        id: watchlist_view
+                        orientation: 'vertical'
+                        size_hint_y: None
+                        height: self.minimum_height
+
+
+# =====================================================================
+# Device List Item (Monitor tab)
+# =====================================================================
 <DeviceListItem>:
     orientation: 'vertical'
-    padding: [10, 10, 10, 10]
-    spacing: 5
+    padding: [10, 8, 10, 8]
+    spacing: 4
     size_hint_y: None
-    height: 170
+    height: 140
 
-    # CORRECTED: Each property is now on its own line
     device_mac: ''
     device_alias: ''
     locations_seen: ''
@@ -58,66 +286,155 @@ BoxLayout:
     display_name: ''
     device_type: ''
 
-    Label:
-        color: app.theme_colors['text_primary']
-        text: "Device: " + root.display_name
-        font_size: '16sp'
-    Label:
-        color: app.theme_colors['text_primary']
-        text: "Type: " + root.device_type
-    Label:
-        color: app.theme_colors['text_primary']
-        text: "Locations Seen: " + root.locations_seen
-    Label:
-        color: app.theme_colors['text_primary']
-        text: "Last Seen: " + root.last_seen
-    Button:
-        text: "Name this Device"
-        size_hint_y: None
-        height: 40
-        on_press: root.show_alias_popup()
+    canvas.before:
+        Color:
+            rgba: root.card_color
+        RoundedRectangle:
+            pos: self.x + 4, self.y + 2
+            size: self.width - 8, self.height - 4
+            radius: [6]
 
+    Label:
+        color: app.theme_colors['text_primary']
+        text: root.display_name
+        font_size: '16sp'
+        bold: True
+        halign: 'left'
+        text_size: self.size
+        size_hint_y: None
+        height: 24
+    Label:
+        color: 0.5, 0.6, 0.8, 1
+        text: 'Type: ' + root.device_type + '  |  Locations: ' + root.locations_seen
+        font_size: '13sp'
+        halign: 'left'
+        text_size: self.size
+        size_hint_y: None
+        height: 20
+    Label:
+        color: 0.5, 0.6, 0.8, 1
+        text: 'Last seen: ' + root.last_seen
+        font_size: '13sp'
+        halign: 'left'
+        text_size: self.size
+        size_hint_y: None
+        height: 20
+    BoxLayout:
+        size_hint_y: None
+        height: 36
+        spacing: 5
+        Button:
+            text: 'Name Device'
+            size_hint_x: 0.5
+            on_press: root.show_alias_popup()
+        Button:
+            text: 'Add to Watchlist'
+            size_hint_x: 0.5
+            on_press: root.add_to_watchlist()
+
+
+# =====================================================================
+# Watchlist Item
+# =====================================================================
+<WatchlistItem>:
+    orientation: 'horizontal'
+    padding: [10, 5, 10, 5]
+    spacing: 5
+    size_hint_y: None
+    height: 50
+
+    canvas.before:
+        Color:
+            rgba: 0.1, 0.1, 0.18, 1
+        RoundedRectangle:
+            pos: self.x + 4, self.y + 2
+            size: self.width - 8, self.height - 4
+            radius: [4]
+
+    Label:
+        text: root.device_alias if root.device_alias else root.device_mac
+        font_size: '14sp'
+        bold: True
+        color: app.theme_colors['text_primary']
+        halign: 'left'
+        text_size: self.size
+        size_hint_x: 0.35
+    Label:
+        text: root.device_mac
+        font_size: '12sp'
+        color: 0.5, 0.6, 0.8, 1
+        halign: 'left'
+        text_size: self.size
+        size_hint_x: 0.35
+    Label:
+        text: root.device_type
+        font_size: '12sp'
+        color: 0.5, 0.6, 0.8, 1
+        halign: 'center'
+        text_size: self.size
+        size_hint_x: 0.15
+    Button:
+        text: 'X'
+        size_hint_x: 0.15
+        on_press: root.remove_from_watchlist()
+
+
+# =====================================================================
+# Alias Popup (shared)
+# =====================================================================
 <AliasPopup>:
-    size_hint: 0.8, 0.7
+    size_hint: 0.8, 0.6
     auto_dismiss: False
     BoxLayout:
         orientation: 'vertical'
         padding: 20
-        spacing: 15
+        spacing: 12
+        canvas.before:
+            Color:
+                rgba: 0.08, 0.08, 0.15, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [10]
         Label:
-            text: "Name a Device"
-            font_size: '24sp'
+            text: 'Name a Device'
+            font_size: '22sp'
             size_hint_y: None
-            height: 40
+            height: 36
             bold: True
+            color: app.theme_colors['text_primary']
         BoxLayout:
             size_hint_y: None
-            height: 30
+            height: 28
             Label:
-                text: "MAC Address:"
-                size_hint_x: 0.4
-                halign: 'left'
+                text: 'MAC:'
+                size_hint_x: 0.2
+                halign: 'right'
+                text_size: self.size
+                color: 0.5, 0.6, 0.8, 1
             Label:
                 text: root.device_mac
-                font_name: 'DroidSansMono'
                 bold: True
-                size_hint_x: 0.6
+                size_hint_x: 0.8
+                color: app.theme_colors['text_primary']
         TextInput:
             id: alias_input
-            hint_text: 'Enter Alias (e.g., "Gray Honda Civic")'
+            hint_text: 'Enter Alias (e.g. "Gray Honda Civic")'
             multiline: False
             size_hint_y: None
-            height: 40
+            height: 38
         TextInput:
             id: notes_input
             hint_text: 'Enter notes (optional)'
+            size_hint_y: None
+            height: 60
         BoxLayout:
             size_hint_y: None
-            height: 50
+            height: 44
             spacing: 10
             Button:
-                text: "Save"
+                text: 'Save'
                 on_press: root.save(alias_input.text, notes_input.text)
             Button:
-                text: "Cancel"
+                text: 'Cancel'
                 on_press: root.dismiss()
