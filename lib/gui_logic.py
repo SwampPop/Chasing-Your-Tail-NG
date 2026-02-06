@@ -62,3 +62,53 @@ def run_watchlist_check(db_path, watchlist_macs, time_window):
     except DatabaseQueryError as e:
         logging.warning(f"Could not check watchlist: {e}")
         return None
+
+
+# ------------------------------------------------------------------
+# Dashboard queries
+# ------------------------------------------------------------------
+
+def get_dashboard_stats(db_path):
+    """Gather statistics for the GUI dashboard.
+
+    Returns a dict with db_status, device_count, last_seen_time,
+    watchlist_count, and db_file.
+    """
+    stats = {
+        'db_status': 'DISCONNECTED',
+        'device_count': 0,
+        'last_seen_time': 'N/A',
+        'watchlist_count': 0,
+        'db_file': os.path.basename(db_path) if db_path else 'None',
+    }
+
+    # Watchlist count (independent of Kismet DB)
+    try:
+        stats['watchlist_count'] = len(watchlist_manager.get_watchlist_macs())
+    except Exception:
+        pass
+
+    if not db_path or db_path == "NOT_FOUND" or not os.path.exists(db_path):
+        return stats
+
+    try:
+        with SecureKismetDB(db_path) as db:
+            # Total device count
+            rows = db.execute_safe_query(
+                "SELECT COUNT(*) as cnt FROM devices")
+            stats['device_count'] = rows[0]['cnt'] if rows else 0
+
+            # Most recent device timestamp
+            rows = db.execute_safe_query(
+                "SELECT MAX(last_time) as latest FROM devices")
+            if rows and rows[0]['latest']:
+                ts = rows[0]['latest']
+                stats['last_seen_time'] = time.strftime(
+                    '%Y-%m-%d %H:%M:%S', time.localtime(ts))
+
+            stats['db_status'] = 'CONNECTED'
+    except Exception as e:
+        logging.error(f"Dashboard stats query failed: {e}")
+        stats['db_status'] = f'ERROR: {e}'
+
+    return stats
