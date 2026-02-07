@@ -362,7 +362,7 @@ class CYTApp(App):
                     results, watchlist_macs)
                 if threat_mac:
                     alias = watchlist_manager.get_device_alias(threat_mac)
-                    self.trigger_confirmed_threat_alert(threat_mac, alias)
+                    self.trigger_watchlist_alert(threat_mac, alias)
             except DatabaseQueryError as e:
                 logging.warning(
                     f"Could not cross-reference watchlist: {e}")
@@ -392,20 +392,20 @@ class CYTApp(App):
     # Alert bar
     # ------------------------------------------------------------------
 
-    def trigger_confirmed_threat_alert(self, mac, alias):
+    def trigger_watchlist_alert(self, mac, alias):
+        """Alert that a watchlisted device was detected in the current scan.
+
+        This is an informational alert - it means a device you are tracking
+        is present in the Kismet data.  It does NOT mean you are being
+        followed.  The deep analysis (SurveillanceAnalyzer) is what
+        determines actual following / surveillance behaviour.
+        """
         alert_bar = self.root.ids.alert_bar
         display_name = f"'{alias}'" if alias else mac
-        alert_bar.text = (f"!!! {AlertType.CONFIRMED_THREAT.value}: "
-                          f"{display_name} IS FOLLOWING !!!")
+        alert_bar.text = (f"{AlertType.WATCHLIST.value}: "
+                          f"Watchlist device {display_name} detected nearby")
         Animation.cancel_all(alert_bar)
-        anim = Animation(
-            color=(0.1, 0.1, 0.1, 1),
-            duration=self.ANIMATION_DURATION) + \
-            Animation(
-                color=self.theme_colors['accent_purple'],
-                duration=self.ANIMATION_DURATION)
-        anim.repeat = True
-        anim.start(alert_bar)
+        alert_bar.color = self.theme_colors['accent_amber']
 
     def reset_alert_bar(self):
         alert_bar = self.root.ids.alert_bar
@@ -419,8 +419,7 @@ class CYTApp(App):
 
     def check_for_drones(self, dt):
         alert_bar = self.root.ids.alert_bar
-        if AlertType.CONFIRMED_THREAT.value in alert_bar.text:
-            return
+        # Drone alerts take priority over watchlist, but not analysis results
         if AlertType.WATCHLIST.value in alert_bar.text:
             return
 
@@ -429,16 +428,15 @@ class CYTApp(App):
         if drones:
             drone_mac, drone_name = drones[0]
             display_name = drone_name if drone_name else drone_mac
-            alert_bar.text = (f"!!! {AlertType.DRONE.value} DETECTED: "
-                              f"{display_name} !!!")
-            alert_bar.color = self.theme_colors['accent_amber']
+            alert_bar.text = (f"{AlertType.DRONE.value} DETECTED: "
+                              f"{display_name}")
+            alert_bar.color = self.theme_colors['accent_red']
         elif AlertType.DRONE.value in alert_bar.text:
             self.reset_alert_bar()
 
     def check_watchlist(self, dt):
         alert_bar = self.root.ids.alert_bar
-        if AlertType.CONFIRMED_THREAT.value in alert_bar.text:
-            return
+        # Don't override drone alerts
         if AlertType.DRONE.value in alert_bar.text:
             return
 
@@ -453,9 +451,10 @@ class CYTApp(App):
                 self.DB_PATH, watchlist, self.WATCHLIST_ALERT_WINDOW)
             if seen_macs:
                 alias = watchlist_manager.get_device_alias(seen_macs[0])
-                alert_bar.text = (f"!!! {AlertType.WATCHLIST.value}: "
-                                  f"'{alias}' DETECTED NEARBY !!!")
-                alert_bar.color = self.theme_colors['accent_red']
+                display_name = f"'{alias}'" if alias else seen_macs[0]
+                alert_bar.text = (f"{AlertType.WATCHLIST.value}: "
+                                  f"Watchlist device {display_name} detected nearby")
+                alert_bar.color = self.theme_colors['accent_amber']
             elif AlertType.WATCHLIST.value in alert_bar.text:
                 self.reset_alert_bar()
         except DatabaseQueryError as e:
