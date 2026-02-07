@@ -816,6 +816,12 @@ def main():
 
     print("Initializing CYT-NG TUI...")
     if not tui.initialize():
+        # Check log file for the actual error
+        if tui.log_file_path and os.path.exists(tui.log_file_path):
+            with open(tui.log_file_path) as f:
+                for line in f:
+                    if 'CRITICAL' in line or 'Fatal' in line:
+                        print(f"  Error: {line.strip()}")
         print("TUI initialization failed. Falling back to standard CLI mode.")
         _run_fallback()
         return
