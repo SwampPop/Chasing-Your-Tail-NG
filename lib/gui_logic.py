@@ -5,6 +5,7 @@ import os
 import time
 import sqlite3
 import logging
+import glob
 from secure_database import SecureKismetDB
 from lib import watchlist_manager
 from lib.watchlist_manager import DatabaseQueryError
@@ -12,6 +13,31 @@ from lib.watchlist_manager import DatabaseQueryError
 
 class DatabaseNotFound(Exception):
     pass
+
+
+def resolve_db_glob(path_pattern):
+    expanded_path = os.path.expanduser(path_pattern)
+    if os.path.isdir(expanded_path):
+        expanded_path = os.path.join(expanded_path, "*.kismet")
+    return expanded_path
+
+
+def find_latest_db_path(path_pattern, fallback_path=None):
+    """
+    Resolve the latest Kismet DB path from a file or glob pattern.
+
+    Returns a tuple of:
+      (db_path_or_NOT_FOUND, resolved_glob_pattern)
+    """
+    resolved_glob = resolve_db_glob(path_pattern)
+    list_of_files = glob.glob(resolved_glob)
+    if list_of_files:
+        return max(list_of_files, key=os.path.getmtime), resolved_glob
+
+    if fallback_path and os.path.exists(fallback_path):
+        return fallback_path, resolved_glob
+
+    return "NOT_FOUND", resolved_glob
 
 
 def get_chase_targets(db_path, time_window, locations_threshold):
@@ -64,15 +90,30 @@ def run_watchlist_check(db_path, watchlist_macs, time_window):
         return None
 
 
+def get_live_device_feed(db_path, time_window=120):
+    """
+    Fetches all recently seen devices for the live dashboard feed.
+    """
+    if not os.path.exists(db_path) or db_path == "NOT_FOUND":
+        return []
+
+    try:
+        with SecureKismetDB(db_path) as db:
+            return db.get_live_devices(time_window)
+    except Exception as e:
+        logging.error(f"Error fetching live device feed: {e}")
+        return []
+
+
 # ------------------------------------------------------------------
 # Dashboard queries
 # ------------------------------------------------------------------
 
-def get_dashboard_stats(db_path):
+def get_dashboard_stats(db_path, freshness_minutes=5):
     """Gather statistics for the GUI dashboard.
 
     Returns a dict with db_status, device_count, last_seen_time,
-    watchlist_count, and db_file.
+    watchlist_count, db_file, db_age_minutes, and db_freshness.
     """
     stats = {
         'db_status': 'DISCONNECTED',
@@ -80,6 +121,8 @@ def get_dashboard_stats(db_path):
         'last_seen_time': 'N/A',
         'watchlist_count': 0,
         'db_file': os.path.basename(db_path) if db_path else 'None',
+        'db_age_minutes': None,
+        'db_freshness': 'UNKNOWN',
     }
 
     # Watchlist count (independent of Kismet DB)
@@ -92,6 +135,16 @@ def get_dashboard_stats(db_path):
         return stats
 
     try:
+        try:
+            age_seconds = time.time() - os.path.getmtime(db_path)
+            stats['db_age_minutes'] = int(age_seconds // 60)
+            stats['db_freshness'] = (
+                'ACTIVE' if stats['db_age_minutes'] <= freshness_minutes
+                else 'STALE'
+            )
+        except OSError:
+            stats['db_freshness'] = 'UNKNOWN'
+
         with SecureKismetDB(db_path) as db:
             # Total device count
             rows = db.execute_safe_query(
@@ -110,5 +163,72 @@ def get_dashboard_stats(db_path):
     except Exception as e:
         logging.error(f"Dashboard stats query failed: {e}")
         stats['db_status'] = f'ERROR: {e}'
+        stats['db_freshness'] = 'ERROR'
 
     return stats
+
+
+def get_dashboard_health_tone(stats):
+    """Return a normalized health tone for dashboard presentation."""
+    status = stats.get('db_status', 'DISCONNECTED')
+    freshness = stats.get('db_freshness', 'UNKNOWN')
+
+    if status == 'CONNECTED' and freshness == 'ACTIVE':
+        return 'healthy'
+    if status == 'CONNECTED' and freshness in ('STALE', 'UNKNOWN'):
+        return 'warning'
+    return 'error'
+
+
+def get_dashboard_health_summary(stats):
+    """Return a concise operator-facing health summary."""
+    tone = get_dashboard_health_tone(stats)
+    status = stats.get('db_status', 'DISCONNECTED')
+
+    if tone == 'healthy':
+        return 'Telemetry Healthy'
+    if tone == 'warning':
+        return 'Telemetry Stale'
+    if isinstance(status, str) and 'ERROR' in status:
+        return 'Database Error'
+    return 'Telemetry Offline'
+
+
+def get_dashboard_health_detail(stats):
+    """Return detailed operator-facing health context."""
+    status = stats.get('db_status', 'DISCONNECTED')
+    freshness = stats.get('db_freshness', 'UNKNOWN')
+    age = stats.get('db_age_minutes')
+    db_file = stats.get('db_file', 'None')
+    summary = get_dashboard_health_summary(stats)
+
+    if summary == 'Telemetry Healthy':
+        if age is None:
+            return f"{db_file} is connected and feeding live telemetry."
+        return f"{db_file} is connected and updated {age} min ago."
+
+    if summary == 'Telemetry Stale':
+        if age is None or freshness == 'UNKNOWN':
+            return f"{db_file} is connected, but freshness could not be confirmed."
+        return f"{db_file} is connected, but telemetry is {age} min old."
+
+    if summary == 'Database Error':
+        if isinstance(status, str) and len(status) > 90:
+            return f"{status[:87]}..."
+        return str(status)
+
+    return "No active Kismet database is available for live telemetry."
+
+
+def get_dashboard_health_label(stats):
+    """Return a short uppercase status label for compact dashboards."""
+    tone = get_dashboard_health_tone(stats)
+    status = stats.get('db_status', 'DISCONNECTED')
+
+    if tone == 'healthy':
+        return 'HEALTHY'
+    if tone == 'warning':
+        return 'STALE'
+    if isinstance(status, str) and 'ERROR' in status:
+        return 'ERROR'
+    return 'OFFLINE'

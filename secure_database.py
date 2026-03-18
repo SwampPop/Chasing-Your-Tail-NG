@@ -219,6 +219,60 @@ class SecureKismetDB:
         params = (time_threshold,)
         return self.execute_safe_query(query, params)
 
+    def get_live_devices(self, time_window_seconds: int = 120) -> List[Dict[str, Any]]:
+        """
+        Get all devices seen within the last time window for live dashboard view.
+        Returns flattened list of dicts with MAC, Signal, Channel, Type, and Manufacturer.
+        """
+        time_threshold = int(time.time()) - time_window_seconds
+        query = ("SELECT devmac, type, device, last_time, strongest_signal "
+                 "FROM devices WHERE last_time > ? "
+                 "ORDER BY last_time DESC")
+        params = (time_threshold,)
+
+        rows = self.execute_safe_query(query, params)
+        live_devices = []
+
+        for row in rows:
+            mac = row['devmac']
+            last_time = row['last_time']
+            device_type = row['type']
+            signal = row['strongest_signal'] if 'strongest_signal' in row.keys() else -100
+
+            # Parse JSON for more details
+            device_data = {}
+            if row['device']:
+                try:
+                    device_data = json.loads(row['device'])
+                except json.JSONDecodeError:
+                    pass
+
+            channel = device_data.get('kismet.device.base.channel', '')
+            manuf = device_data.get('kismet.device.base.manuf', '')
+            device_type = (
+                device_data.get('kismet.device.base.type')
+                or device_type
+                or 'Unknown'
+            )
+
+            # Extract signal more accurately if strongest_signal wasn't enough
+            if signal == -100:
+                base_signal = device_data.get('kismet.device.base.signal', {})
+                if isinstance(base_signal, dict):
+                    signal = base_signal.get('kismet.common.signal.last_signal', -100)
+
+            live_devices.append({
+                'mac': mac,
+                'signal': signal,
+                'channel': channel,
+                'type': device_type,
+                'manufacturer': manuf,
+                'last_seen': last_time,
+                'device_data': device_data,
+            })
+
+        return live_devices
+
 
 class SecureTimeWindows:
     """Secure time window management for device tracking"""

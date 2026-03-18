@@ -45,6 +45,8 @@ This project has been security-hardened to eliminate critical vulnerabilities:
 ### System Management
 - **🆕 Unified daemon orchestration** - Single-command start/stop/restart/status for all components
 - **Enhanced GUI interface** with surveillance analysis button
+- **🆕 Live device feed in both GUI and TUI** backed by shared normalized device records
+- **🆕 Shared Kismet DB freshness reporting** across interfaces
 - **Organized file structure** with dedicated output directories
 - **Comprehensive logging** and analysis tools
 - **Systemd integration** for production deployments
@@ -140,9 +142,24 @@ Edit `config.json` with your paths and settings:
 python3 cyt_gui.py  # Enhanced GUI with surveillance analysis
 ```
 **GUI Features:**
+- 📡 **Live Feed tab** - Recently seen devices with signal, channel, type, and manufacturer
+- 🩺 **DB freshness indicators** - active/stale status and database age
 - 🗺️ **Surveillance Analysis** button - GPS-correlated persistence detection with spectacular KML visualization
 - 📈 **Analyze Logs** button - Historical probe request analysis
 - Real-time status monitoring and file generation notifications
+
+### Terminal UI
+```bash
+python3 cyt_tui.py
+```
+**TUI Features:**
+- `[1] Live Feed` with threat-coded rows (`D`, `B`, `P`)
+- `[2] Dashboard` with Kismet DB freshness, age, alert counts, and subsystem status
+- Filter and sort controls for rapid triage:
+  - `f` cycle filters
+  - `s` toggle sort
+  - `h` help overlay
+  - `1` / `2` / `Tab` switch views
 
 ### Command Line Monitoring
 
@@ -232,6 +249,7 @@ python3 legacy/create_ignore_list.py  # Moved to legacy folder
 
 - **chasing_your_tail.py**: Core monitoring engine with real-time Kismet database queries
 - **cyt_gui.py**: Enhanced Tkinter GUI with surveillance analysis capabilities
+- **cyt_tui.py**: Curses-based live monitoring interface for field/terminal use
 - **surveillance_analyzer.py**: GPS surveillance detection with automatic coordinate extraction and advanced KML visualization
 - **surveillance_detector.py**: Core persistence detection engine for suspicious device patterns
 - **gps_tracker.py**: GPS tracking with location clustering and spectacular Google Earth KML generation
@@ -245,6 +263,36 @@ python3 legacy/create_ignore_list.py  # Moved to legacy folder
 - **secure_main_logic.py**: Secure monitoring logic
 - **input_validation.py**: Input sanitization and validation
 - **migrate_credentials.py**: Credential migration tool
+
+### Shared UI/Data Helpers
+- **lib/gui_logic.py**: Shared dashboard stats, live-feed data, and latest-Kismet DB discovery
+
+## Testing
+
+Targeted tests now run cleanly from the repo root without manual path hacks.
+
+```bash
+cd ~/my_projects/0_active_projects/Chasing-Your-Tail-NG
+
+pytest -q tests/test_secure_database.py tests/test_secure_time_windows.py tests/test_gui_logic.py
+pytest -q tests/test_report_generator.py tests/test_surveillance_analyzer.py
+pytest -q tests/test_tui_logic.py
+```
+
+Current targeted coverage includes:
+- secure database queries
+- time-window handling
+- GUI dashboard/live-feed helpers
+- report generation
+- surveillance analyzer stalking logic
+- TUI filtering, sorting, threat labeling, and alert counting
+
+## Current UI/Data Architecture
+
+- Both GUI and TUI resolve the latest Kismet database through shared helpers in `lib/gui_logic.py`
+- Both GUI and TUI use the same live-feed normalization path from `SecureKismetDB.get_live_devices()`
+- DB freshness is derived from Kismet DB file modification time and surfaced consistently in both interfaces
+- `ui_settings.live_feed_window_seconds` controls the recent-device window for GUI and TUI live feeds
 
 ## Output Files & Project Structure
 

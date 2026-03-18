@@ -1,4 +1,12 @@
-from lib.gui_logic import DatabaseNotFound, get_dashboard_stats
+from lib.gui_logic import (
+    DatabaseNotFound,
+    find_latest_db_path,
+    get_dashboard_health_detail,
+    get_dashboard_health_label,
+    get_dashboard_health_summary,
+    get_dashboard_health_tone,
+    get_dashboard_stats,
+)
 from lib.watchlist_manager import DatabaseQueryError
 from lib.database_utils import DatabaseInitError
 from lib import gui_logic
@@ -17,7 +25,6 @@ import os
 import json
 import threading
 import logging
-import glob
 import sqlite3
 from collections import deque
 
@@ -120,6 +127,35 @@ class DeviceListItem(BoxLayout):
             logging.error(f"Could not add to watchlist: {e}")
 
 
+class LiveDeviceItem(BoxLayout):
+    device_mac = StringProperty('')
+    signal = StringProperty('')
+    channel = StringProperty('')
+    device_type = StringProperty('')
+    manufacturer = StringProperty('')
+    last_seen = StringProperty('')
+    signal_color = ListProperty([1, 1, 1, 1])
+
+    def __init__(self, device_data, **kwargs):
+        super().__init__(**kwargs)
+        self.device_mac = device_data.get('mac', '')
+        sig = device_data.get('signal', -100)
+        self.signal = f"{sig} dBm"
+        self.channel = str(device_data.get('channel', ''))
+        self.device_type = device_data.get('type', 'Unknown')
+        self.manufacturer = device_data.get('manufacturer', '')
+        self.last_seen = time.strftime(
+            '%H:%M:%S', time.localtime(device_data.get('last_seen', 0)))
+
+        # Color-code signal strength
+        if sig > -50:
+            self.signal_color = [0.2, 1.0, 0.2, 1]  # Strong - Green
+        elif sig > -70:
+            self.signal_color = [1.0, 0.7, 0, 1]    # Medium - Amber
+        else:
+            self.signal_color = [1.0, 0.2, 0.2, 1]  # Weak - Red
+
+
 # --- MAIN APPLICATION ---
 
 
@@ -132,6 +168,14 @@ class CYTApp(App):
         "accent_amber": (1, 0.7, 0, 1),
         "accent_purple": (0.8, 0.4, 1.0, 1)
     }
+    dashboard_banner_bg = ListProperty([0.1, 0.14, 0.22, 1])
+    dashboard_banner_border = ListProperty([1, 0.7, 0, 1])
+    dashboard_last_refresh = StringProperty("Awaiting first refresh")
+    live_feed_banner_bg = ListProperty([0.1, 0.14, 0.22, 1])
+    live_feed_banner_border = ListProperty([1, 0.7, 0, 1])
+    live_feed_status = StringProperty("Feed waiting for telemetry")
+    live_feed_detail = StringProperty("Refresh the feed to load recent devices from Kismet.")
+    telemetry_alert_text = StringProperty(AlertType.STATUS_MONITORING.value)
 
     def build(self):
         self.appearance_archive_queue = deque()
@@ -159,10 +203,12 @@ class CYTApp(App):
         Clock.schedule_interval(self.check_watchlist, self.INTERVAL_WATCHLIST)
         Clock.schedule_interval(self.check_for_drones, self.INTERVAL_DRONES)
         Clock.schedule_interval(self.archive_data_task, self.ARCHIVE_INTERVAL)
+        Clock.schedule_interval(self.refresh_live_feed, 5)  # Live feed every 5s
 
         # Load dashboard and watchlist after UI builds
         Clock.schedule_once(lambda dt: self.refresh_dashboard(), 0.5)
         Clock.schedule_once(lambda dt: self.load_watchlist(), 0.5)
+        Clock.schedule_once(lambda dt: self.refresh_live_feed(0), 1.0)
 
     def load_settings(self):
         try:
@@ -170,23 +216,20 @@ class CYTApp(App):
                 config = json.load(f)
             self._config = config
             kismet_log_path_pattern = config['paths']['kismet_logs']
-            expanded_path = os.path.expanduser(kismet_log_path_pattern)
-
-            if os.path.isdir(expanded_path):
-                expanded_path = os.path.join(expanded_path, "*.kismet")
-
-            list_of_files = glob.glob(expanded_path)
-            if not list_of_files:
+            self.DB_PATH, self._db_glob_pattern = find_latest_db_path(
+                kismet_log_path_pattern)
+            if self.DB_PATH == "NOT_FOUND":
                 raise FileNotFoundError(
                     f"No Kismet files found matching: "
                     f"{kismet_log_path_pattern}")
-            self.DB_PATH = max(list_of_files, key=os.path.getctime)
             logging.info(f"Using latest Kismet DB: {self.DB_PATH}")
             self.TIME_WINDOW = config['timing']['time_windows']['recent'] * 60
             check_interval = config['timing']['check_interval']
             self.INTERVAL_FOLLOWERS = check_interval
             self.INTERVAL_WATCHLIST = check_interval
             self.INTERVAL_DRONES = check_interval
+            self.DB_FRESHNESS_MINUTES = config.get('kismet_health', {}).get(
+                'data_freshness_threshold_minutes', 5)
 
             alert_settings = config.get('alert_settings', {})
             self.LOCATIONS_THRESHOLD = alert_settings.get(
@@ -201,6 +244,8 @@ class CYTApp(App):
                 'animation_duration', 0.7)
             self.ARCHIVE_INTERVAL = ui_settings.get(
                 'archive_interval_seconds', 300)
+            self.LIVE_FEED_WINDOW = ui_settings.get(
+                'live_feed_window_seconds', 120)
         except (IOError, KeyError, FileNotFoundError) as e:
             logging.critical(
                 f"Failed to load settings from config.json: {e}")
@@ -215,6 +260,22 @@ class CYTApp(App):
             self.WATCHLIST_ALERT_WINDOW = 300
             self.ANIMATION_DURATION = 0.7
             self.ARCHIVE_INTERVAL = 300
+            self.DB_FRESHNESS_MINUTES = 5
+            self.LIVE_FEED_WINDOW = 120
+
+    def _maybe_refresh_db_path(self):
+        pattern = getattr(self, "_db_glob_pattern", None)
+        if not pattern:
+            return
+        latest, _ = find_latest_db_path(pattern)
+        if latest == "NOT_FOUND":
+            if self.DB_PATH != "NOT_FOUND":
+                logging.warning("No Kismet files found. Waiting for data...")
+                self.DB_PATH = "NOT_FOUND"
+            return
+        if self.DB_PATH != latest:
+            logging.info(f"Switching to latest Kismet DB: {latest}")
+            self.DB_PATH = latest
 
     # ------------------------------------------------------------------
     # Dashboard
@@ -226,7 +287,8 @@ class CYTApp(App):
             target=self._refresh_dashboard_bg, daemon=True).start()
 
     def _refresh_dashboard_bg(self):
-        stats = get_dashboard_stats(self.DB_PATH)
+        self._maybe_refresh_db_path()
+        stats = get_dashboard_stats(self.DB_PATH, self.DB_FRESHNESS_MINUTES)
         Clock.schedule_once(lambda dt: self._update_dashboard_ui(stats))
 
     def _update_dashboard_ui(self, stats):
@@ -236,14 +298,56 @@ class CYTApp(App):
         ids.dash_device_count.text = str(stats.get('device_count', 0))
         ids.dash_watchlist_count.text = str(stats.get('watchlist_count', 0))
         ids.dash_last_seen.text = stats.get('last_seen_time', 'N/A')
+        ids.dash_db_age.text = (
+            f"{stats['db_age_minutes']} min"
+            if stats.get('db_age_minutes') is not None else "N/A")
+        ids.dash_db_freshness.text = stats.get('db_freshness', 'UNKNOWN')
 
+        tone = get_dashboard_health_tone(stats)
+        tone_color = self._dashboard_health_color(tone)
+        summary = get_dashboard_health_summary(stats)
+        detail = get_dashboard_health_detail(stats)
+        chip = get_dashboard_health_label(stats)
         status = stats.get('db_status', '')
-        if status == 'CONNECTED':
-            ids.dash_db_status.color = self.theme_colors['accent_green']
-        elif 'ERROR' in status:
-            ids.dash_db_status.color = self.theme_colors['accent_red']
-        else:
-            ids.dash_db_status.color = self.theme_colors['accent_amber']
+
+        ids.dash_health_chip.text = f"[ {chip} ]"
+        ids.dash_health_chip.color = tone_color
+        ids.dash_health_summary.text = summary
+        ids.dash_health_summary.color = tone_color
+        ids.dash_health_detail.text = detail
+        self.dashboard_banner_border = list(tone_color)
+        self.dashboard_banner_bg = self._dashboard_banner_bg(tone)
+        self.dashboard_last_refresh = time.strftime(
+            "Last refresh: %Y-%m-%d %H:%M:%S", time.localtime()
+        )
+
+        ids.dash_db_status.color = tone_color
+        ids.dash_db_freshness.color = tone_color
+        ids.dash_db_age.color = (
+            tone_color
+            if stats.get('db_age_minutes') is not None
+            else self.theme_colors['text_primary']
+        )
+        ids.dash_db_file.color = (
+            self.theme_colors['text_primary']
+            if status == 'CONNECTED'
+            else tone_color
+        )
+        self._update_telemetry_alert(stats)
+
+    def _dashboard_health_color(self, tone):
+        if tone == 'healthy':
+            return self.theme_colors['accent_green']
+        if tone == 'warning':
+            return self.theme_colors['accent_amber']
+        return self.theme_colors['accent_red']
+
+    def _dashboard_banner_bg(self, tone):
+        if tone == 'healthy':
+            return [0.08, 0.16, 0.12, 1]
+        if tone == 'warning':
+            return [0.18, 0.14, 0.06, 1]
+        return [0.18, 0.08, 0.08, 1]
 
     def run_deep_analysis(self):
         """Launch surveillance analysis in a background thread."""
@@ -343,6 +447,7 @@ class CYTApp(App):
 
     def run_follower_query_in_background(self):
         try:
+            self._maybe_refresh_db_path()
             followers = gui_logic.get_chase_targets(
                 self.DB_PATH, self.TIME_WINDOW, self.LOCATIONS_THRESHOLD)
             Clock.schedule_once(
@@ -410,8 +515,8 @@ class CYTApp(App):
     def reset_alert_bar(self):
         alert_bar = self.root.ids.alert_bar
         Animation.cancel_all(alert_bar)
-        alert_bar.text = AlertType.STATUS_MONITORING.value
-        alert_bar.color = self.theme_colors['accent_green']
+        alert_bar.text = self.telemetry_alert_text
+        alert_bar.color = self._telemetry_alert_color()
 
     # ------------------------------------------------------------------
     # Periodic checks
@@ -474,6 +579,92 @@ class CYTApp(App):
 
     def refresh_follower_list(self):
         self.start_follower_query(0)
+
+    def refresh_live_feed(self, dt):
+        """Refresh the live device feed tab."""
+        threading.Thread(
+            target=self._refresh_live_feed_bg, daemon=True).start()
+
+    def _refresh_live_feed_bg(self):
+        try:
+            self._maybe_refresh_db_path()
+            stats = get_dashboard_stats(self.DB_PATH, self.DB_FRESHNESS_MINUTES)
+            live_devices = gui_logic.get_live_device_feed(
+                self.DB_PATH, self.LIVE_FEED_WINDOW)
+            Clock.schedule_once(
+                lambda dt: self._update_live_feed_ui(live_devices, stats))
+        except Exception as e:
+            logging.error(f"Failed to refresh live feed: {e}")
+
+    def _update_live_feed_ui(self, devices, stats):
+        live_list = self.root.ids.live_device_list
+        live_list.clear_widgets()
+        tone = get_dashboard_health_tone(stats)
+        self.live_feed_banner_border = list(self._dashboard_health_color(tone))
+        self.live_feed_banner_bg = self._dashboard_banner_bg(tone)
+
+        if not devices:
+            self.live_feed_status, self.live_feed_detail = self._live_feed_empty_copy(stats)
+            live_list.add_widget(Label(
+                text=self.live_feed_detail,
+                font_size='16sp', color=self.theme_colors['text_primary'],
+                size_hint_y=None, height=40))
+            return
+
+        self.live_feed_status = (
+            f"{len(devices)} active devices in last {self.LIVE_FEED_WINDOW // 60} min"
+        )
+        self.live_feed_detail = (
+            f"{get_dashboard_health_summary(stats)} | "
+            f"Last seen: {stats.get('last_seen_time', 'N/A')}"
+        )
+        for dev in devices[:50]:  # Limit to top 50 for performance
+            item = LiveDeviceItem(device_data=dev)
+            live_list.add_widget(item)
+
+    def _live_feed_empty_copy(self, stats):
+        summary = get_dashboard_health_summary(stats)
+        detail = get_dashboard_health_detail(stats)
+        if summary == "Telemetry Healthy":
+            return (
+                "Feed quiet, telemetry healthy",
+                f"No devices seen in the last {self.LIVE_FEED_WINDOW // 60} min.",
+            )
+        if summary == "Telemetry Stale":
+            return ("Feed stale", detail)
+        if summary == "Database Error":
+            return ("Feed unavailable", detail)
+        return ("Feed offline", detail)
+
+    def _update_telemetry_alert(self, stats):
+        summary = get_dashboard_health_summary(stats)
+        if summary == "Telemetry Healthy":
+            self.telemetry_alert_text = AlertType.STATUS_MONITORING.value
+        else:
+            self.telemetry_alert_text = (
+                f"{AlertType.STATUS_MONITORING.value} | {summary.upper()}"
+            )
+
+        alert_bar = self.root.ids.alert_bar
+        if self._alert_bar_locked():
+            return
+
+        alert_bar.text = self.telemetry_alert_text
+        alert_bar.color = self._telemetry_alert_color()
+
+    def _telemetry_alert_color(self):
+        if "STALE" in self.telemetry_alert_text:
+            return self.theme_colors['accent_amber']
+        if "OFFLINE" in self.telemetry_alert_text or "ERROR" in self.telemetry_alert_text:
+            return self.theme_colors['accent_red']
+        return self.theme_colors['accent_green']
+
+    def _alert_bar_locked(self):
+        alert_text = self.root.ids.alert_bar.text
+        return (
+            AlertType.DRONE.value in alert_text
+            or AlertType.WATCHLIST.value in alert_text
+        )
 
     def archive_data_task(self, dt):
         """Takes pending appearances from the queue and archives them."""

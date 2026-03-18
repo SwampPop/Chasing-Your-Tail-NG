@@ -33,8 +33,84 @@ BoxLayout:
     # --- Tabbed Panel ---
     TabbedPanel:
         do_default_tab: False
-        tab_width: self.width / 3
+        tab_width: self.width / 4
         tab_height: '36sp'
+
+        # ==================== LIVE FEED TAB ====================
+        TabbedPanelItem:
+            text: 'Live Feed'
+            BoxLayout:
+                orientation: 'vertical'
+                padding: [8, 8, 8, 8]
+                spacing: 8
+                canvas.before:
+                    Color:
+                        rgba: app.theme_colors['background']
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+
+                BoxLayout:
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    height: 68
+                    padding: [12, 10]
+                    spacing: 3
+                    canvas.before:
+                        Color:
+                            rgba: app.live_feed_banner_bg
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                        Color:
+                            rgba: app.live_feed_banner_border
+                        Rectangle:
+                            pos: self.x, self.y
+                            size: 4, self.height
+
+                    Label:
+                        id: live_feed_status
+                        text: app.live_feed_status
+                        font_size: '17sp'
+                        bold: True
+                        size_hint_y: None
+                        height: 22
+                        color: app.live_feed_banner_border
+                        halign: 'left'
+                        valign: 'middle'
+                        text_size: self.width, self.height
+                        shorten: True
+                        shorten_from: 'right'
+                        max_lines: 1
+
+                    Label:
+                        id: live_feed_detail
+                        text: app.live_feed_detail
+                        font_size: '13sp'
+                        size_hint_y: None
+                        height: 22
+                        color: app.theme_colors['text_primary']
+                        halign: 'left'
+                        valign: 'middle'
+                        text_size: self.width, self.height
+                        shorten: True
+                        shorten_from: 'right'
+                        max_lines: 1
+
+                ScrollView:
+                    canvas.before:
+                        Color:
+                            rgba: app.theme_colors['background']
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                    BoxLayout:
+                        id: live_device_list
+                        orientation: 'vertical'
+                        size_hint_y: None
+                        height: self.minimum_height
+                        padding: [5, 5, 5, 5]
+                        spacing: 2
 
         # ==================== DASHBOARD TAB ====================
         TabbedPanelItem:
@@ -57,6 +133,88 @@ BoxLayout:
                     size_hint_y: None
                     height: 40
                     color: app.theme_colors['text_primary']
+
+                BoxLayout:
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    height: 102
+                    padding: [12, 10]
+                    spacing: 5
+                    canvas.before:
+                        Color:
+                            rgba: app.dashboard_banner_bg
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                        Color:
+                            rgba: app.dashboard_banner_border
+                        Rectangle:
+                            pos: self.x, self.y
+                            size: 4, self.height
+
+                    BoxLayout:
+                        orientation: 'horizontal'
+                        size_hint_y: None
+                        height: 24
+                        spacing: 8
+
+                        Label:
+                            id: dash_health_chip
+                            text: '[ STALE ]'
+                            font_size: '12sp'
+                            bold: True
+                            size_hint_x: None
+                            width: 86
+                            color: app.theme_colors['accent_amber']
+                            halign: 'left'
+                            valign: 'middle'
+                            text_size: self.width, self.height
+                            shorten: True
+                            shorten_from: 'right'
+                            max_lines: 1
+
+                        Label:
+                            id: dash_health_summary
+                            text: 'Awaiting telemetry...'
+                            font_size: '18sp'
+                            bold: True
+                            size_hint_y: None
+                            height: 24
+                            color: app.theme_colors['accent_amber']
+                            halign: 'left'
+                            valign: 'middle'
+                            text_size: self.width, self.height
+                            shorten: True
+                            shorten_from: 'right'
+                            max_lines: 1
+
+                    Label:
+                        id: dash_health_detail
+                        text: 'Refresh dashboard to load the latest Kismet database.'
+                        font_size: '13sp'
+                        size_hint_y: None
+                        height: 24
+                        color: app.theme_colors['text_primary']
+                        halign: 'left'
+                        valign: 'middle'
+                        text_size: self.width, self.height
+                        shorten: True
+                        shorten_from: 'right'
+                        max_lines: 1
+
+                    Label:
+                        id: dash_last_refresh
+                        text: app.dashboard_last_refresh
+                        font_size: '12sp'
+                        size_hint_y: None
+                        height: 18
+                        color: 0.62, 0.72, 0.88, 1
+                        halign: 'left'
+                        valign: 'middle'
+                        text_size: self.width, self.height
+                        shorten: True
+                        shorten_from: 'right'
+                        max_lines: 1
 
                 # Status grid
                 GridLayout:
@@ -83,7 +241,11 @@ BoxLayout:
                         height: 30
                         color: app.theme_colors['text_primary']
                         halign: 'left'
-                        text_size: self.size
+                        valign: 'middle'
+                        text_size: self.width, self.height
+                        shorten: True
+                        shorten_from: 'center'
+                        max_lines: 1
 
                     Label:
                         text: 'Connection:'
@@ -102,7 +264,11 @@ BoxLayout:
                         height: 30
                         color: app.theme_colors['accent_green']
                         halign: 'left'
-                        text_size: self.size
+                        valign: 'middle'
+                        text_size: self.width, self.height
+                        shorten: True
+                        shorten_from: 'right'
+                        max_lines: 1
 
                     Label:
                         text: 'Total Devices:'
@@ -162,6 +328,52 @@ BoxLayout:
                         color: app.theme_colors['text_primary']
                         halign: 'left'
                         text_size: self.size
+
+                    Label:
+                        text: 'DB Freshness:'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: 0.5, 0.6, 0.8, 1
+                        halign: 'right'
+                        text_size: self.size
+
+                    Label:
+                        id: dash_db_freshness
+                        text: 'UNKNOWN'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: app.theme_colors['accent_amber']
+                        halign: 'left'
+                        valign: 'middle'
+                        text_size: self.width, self.height
+                        shorten: True
+                        shorten_from: 'right'
+                        max_lines: 1
+
+                    Label:
+                        text: 'DB Age:'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: 0.5, 0.6, 0.8, 1
+                        halign: 'right'
+                        text_size: self.size
+
+                    Label:
+                        id: dash_db_age
+                        text: 'N/A'
+                        font_size: '14sp'
+                        size_hint_y: None
+                        height: 30
+                        color: app.theme_colors['text_primary']
+                        halign: 'left'
+                        valign: 'middle'
+                        text_size: self.width, self.height
+                        shorten: True
+                        shorten_from: 'right'
+                        max_lines: 1
 
                 # Spacer + Run Analysis button
                 Widget:
@@ -267,6 +479,69 @@ BoxLayout:
                         orientation: 'vertical'
                         size_hint_y: None
                         height: self.minimum_height
+
+
+# =====================================================================
+# Live Device Item (Live Feed tab)
+# =====================================================================
+<LiveDeviceItem>:
+    orientation: 'horizontal'
+    padding: [10, 4, 10, 4]
+    spacing: 10
+    size_hint_y: None
+    height: 40
+
+    canvas.before:
+        Color:
+            rgba: 0.1, 0.1, 0.18, 1
+        RoundedRectangle:
+            pos: self.x + 2, self.y + 1
+            size: self.width - 4, self.height - 2
+            radius: [4]
+
+    Label:
+        text: root.device_mac
+        font_size: '13sp'
+        bold: True
+        color: app.theme_colors['text_primary']
+        size_hint_x: 0.22
+        halign: 'left'
+        text_size: self.size
+
+    Label:
+        text: root.signal
+        font_size: '13sp'
+        color: root.signal_color
+        bold: True
+        size_hint_x: 0.10
+
+    Label:
+        text: 'Ch:' + root.channel
+        font_size: '11sp'
+        color: 0.5, 0.6, 0.8, 1
+        size_hint_x: 0.08
+
+    Label:
+        text: root.device_type
+        font_size: '11sp'
+        color: app.theme_colors['accent_purple']
+        size_hint_x: 0.15
+        halign: 'left'
+        text_size: self.size
+
+    Label:
+        text: root.manufacturer
+        font_size: '11sp'
+        color: 0.5, 0.6, 0.8, 1
+        size_hint_x: 0.30
+        halign: 'left'
+        text_size: self.size
+
+    Label:
+        text: root.last_seen
+        font_size: '10sp'
+        color: 0.4, 0.5, 0.7, 1
+        size_hint_x: 0.15
 
 
 # =====================================================================

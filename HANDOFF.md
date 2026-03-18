@@ -1,11 +1,43 @@
 # Handoff Document - CYT Wardrive Success
 
 **Created**: 2026-01-25 13:10
-**Last Updated**: 2026-01-29 18:00
+**Last Updated**: 2026-03-18
 **Session Duration**: ~8 hours (wardriving + analysis + attacker hunter + security audit)
 
 ## Goal
 Get Chasing-Your-Tail-NG (CYT) fully operational for wireless surveillance detection, including **wardriving capability** with GPS location tagging and lid-closed operation.
+
+---
+
+## Current Development Snapshot (2026-03-18)
+
+### Codebase Status
+- Targeted test suite now runs from repo root without manual `PYTHONPATH` setup
+- GUI and TUI now share:
+  - latest Kismet DB discovery
+  - live-feed device normalization
+  - DB freshness reporting semantics
+- TUI logic now has dedicated tests for filtering, sorting, threat labeling, and alert counting
+
+### Most Recent Engineering Improvements
+1. **Test harness repaired** - repo-root imports and file-backed SQLite tests now match real runtime behavior
+2. **Shared DB discovery path** - GUI and TUI both resolve latest Kismet DB through `lib/gui_logic.py`
+3. **Shared live-feed normalization** - TUI now consumes the same normalized device records as the GUI
+4. **DB freshness surfaced consistently** - both interfaces report active/stale state using the same logic
+5. **Analysis import hardening** - `surveillance_analyzer.py` and `cyt_tui.py` no longer hard-require secure credential loading at import time
+
+### Current Safe Validation Commands
+```bash
+cd ~/my_projects/0_active_projects/Chasing-Your-Tail-NG
+pytest -q tests/test_secure_database.py tests/test_secure_time_windows.py tests/test_gui_logic.py
+pytest -q tests/test_report_generator.py tests/test_surveillance_analyzer.py
+pytest -q tests/test_tui_logic.py
+```
+
+### Recommended Next Engineering Work
+1. Add stronger visual/status treatment for DB freshness in the TUI dashboard
+2. Reduce remaining duplication between GUI and TUI threat presentation rules
+3. Consider broadening the automated test suite beyond the targeted set once runtime dependencies are standardized
 
 ---
 
@@ -448,4 +480,3 @@ sudo pmset -a displaysleep 10
 **Last Manual Update**: 2026-01-29 18:00
 
 *Session closed cleanly. Wardrive analysis complete: 5,958 devices, 64% GPS coverage, 5 watchlist hits. Attacker home network at 40.7132°N, 74.006°W. All commits pushed to origin/main. Systems were operational at session close.*
-

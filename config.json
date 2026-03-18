@@ -1,7 +1,7 @@
 {
   "paths": {
     "log_dir": "logs",
-    "kismet_logs": "logs/kismet",
+    "kismet_logs": "/Users/REDACTED/Library/Mobile Documents/com~apple~CloudDocs/Documents_Local_Clean/IT/Chasing-Your-Tail-NG",
     "ignore_lists": {
       "mac": "mac_list.txt",
       "ssid": "ssid_list.txt"

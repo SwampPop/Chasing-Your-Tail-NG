@@ -117,7 +117,7 @@ class CYTMonitorApp:
                 else:
                     raise FileNotFoundError(f"No Kismet database files found at: {db_path_pattern}")
             else:
-                self.latest_kismet_db = max(list_of_files, key=os.path.getctime)
+                self.latest_kismet_db = max(list_of_files, key=os.path.getmtime)
             
             logging.info(f"Using Kismet database: {self.latest_kismet_db}")
             

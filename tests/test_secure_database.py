@@ -1,6 +1,8 @@
 import unittest
 import sqlite3
 import time
+import tempfile
+import os
 from secure_database import SecureKismetDB
 
 
@@ -11,9 +13,11 @@ class TestSecureKismetDB(unittest.TestCase):
 
     def setUp(self):
         """
-        Set up a temporary in-memory database for testing.
+        Set up a temporary file-backed database for testing.
         """
-        self.db_path = ":memory:"
+        self.temp_db = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+        self.temp_db.close()
+        self.db_path = self.temp_db.name
         self.conn = sqlite3.connect(self.db_path)
         self.cursor = self.conn.cursor()
 
@@ -23,7 +27,10 @@ class TestSecureKismetDB(unittest.TestCase):
                 devmac TEXT,
                 type TEXT,
                 device TEXT,
-                last_time REAL
+                last_time REAL,
+                min_lat REAL,
+                min_lon REAL,
+                strongest_signal INTEGER
             )
         """)
         self.cursor.execute("""
@@ -36,14 +43,14 @@ class TestSecureKismetDB(unittest.TestCase):
 
         # Add some test data
         self.now = time.time()
-        self.cursor.execute("INSERT INTO devices VALUES (?, ?, ?, ?)",
-                            ('AA:AA:AA:AA:AA:AA', 'Wi-Fi Client', '{}', self.now - 10))
-        self.cursor.execute("INSERT INTO devices VALUES (?, ?, ?, ?)",
-                            ('BB:BB:BB:BB:BB:BB', 'Wi-Fi Client', '{}', self.now - 20))
-        self.cursor.execute("INSERT INTO devices VALUES (?, ?, ?, ?)",
-                            ('CC:CC:CC:CC:CC:CC', 'Wi-Fi AP', '{"dot11.device": {"dot11.device.last_probed_ssid_record": {"dot11.probedssid.ssid": "test_ssid"}}}', self.now - 30))
-        self.cursor.execute("INSERT INTO devices VALUES (?, ?, ?, ?)",
-                            ('DD:DD:DD:DD:DD:DD', 'UAV', '{}', self.now - 40))
+        self.cursor.execute("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            ('AA:AA:AA:AA:AA:AA', 'Wi-Fi Client', '{}', self.now - 10, None, None, -45))
+        self.cursor.execute("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            ('BB:BB:BB:BB:BB:BB', 'Wi-Fi Client', '{}', self.now - 20, None, None, -60))
+        self.cursor.execute("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            ('CC:CC:CC:CC:CC:CC', 'Wi-Fi AP', '{"dot11.device": {"dot11.device.last_probed_ssid_record": {"dot11.probedssid.ssid": "test_ssid"}}}', self.now - 30, None, None, -70))
+        self.cursor.execute("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            ('DD:DD:DD:DD:DD:DD', 'UAV', '{}', self.now - 40, None, None, -55))
         self.conn.commit()
 
     def tearDown(self):
@@ -51,6 +58,7 @@ class TestSecureKismetDB(unittest.TestCase):
         Close the database connection after each test.
         """
         self.conn.close()
+        os.unlink(self.db_path)
 
     def test_get_devices_by_time_range(self):
         """
@@ -116,6 +124,16 @@ class TestSecureKismetDB(unittest.TestCase):
             drones = db.check_for_drones_secure(60)
             self.assertEqual(len(drones), 1)
             self.assertEqual(drones[0]['devmac'], 'DD:DD:DD:DD:DD:DD')
+
+    def test_get_live_devices(self):
+        """
+        Test the live-device query used by the GUI/TUI live feed.
+        """
+        with SecureKismetDB(self.db_path) as db:
+            devices = db.get_live_devices(25)
+            self.assertEqual(len(devices), 2)
+            self.assertEqual(devices[0]['mac'], 'AA:AA:AA:AA:AA:AA')
+            self.assertEqual(devices[0]['signal'], -45)
 
 
 if __name__ == '__main__':

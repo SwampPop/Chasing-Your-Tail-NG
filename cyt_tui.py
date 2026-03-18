@@ -14,7 +14,6 @@ Keys:
     q            - Quit
 """
 import curses
-import glob
 import io
 import json
 import logging
@@ -30,11 +29,16 @@ from typing import Any, Dict, List, Optional, Set
 
 # CYT imports
 from config_validator import validate_config_file
-from secure_credentials import secure_config_loader
 from secure_database import SecureKismetDB
 from secure_ignore_loader import load_ignore_lists
 from secure_main_logic import SecureCYTMonitor
 from lib import history_manager
+from lib.gui_logic import (
+    find_latest_db_path,
+    get_dashboard_health_label,
+    get_dashboard_health_tone,
+    get_dashboard_stats,
+)
 
 # Optional CYT imports
 try:
@@ -183,12 +187,21 @@ class CYTTerminalUI:
         self.ignore_list: Set[str] = set()
         self.probe_ignore_list: Set[str] = set()
         self.latest_kismet_db: Optional[str] = None
+        self.db_glob_pattern: Optional[str] = None
         self.monitor: Optional[TUIMonitor] = None
         self.health_monitor = None
         self.alert_manager_instance = None
         self.context_engine = None
         self.log_file_handle = None
         self.log_file_path: Optional[pathlib.Path] = None
+        self.behavioral_threats: Dict[str, float] = {}
+        self.show_help = False
+        self.filter_mode = "all"
+        self.sort_mode = "threat"
+        self.top_n_limit = 50
+        self.live_feed_window_seconds = 120
+        self.db_freshness_minutes = 5
+        self.dashboard_stats: Dict[str, Any] = {}
 
         # TUI state
         self.log_lines: deque = deque(maxlen=MAX_LOG_LINES)
@@ -233,6 +246,7 @@ class CYTTerminalUI:
                 return False
 
             logging.info("Loading configuration and credentials...")
+            from secure_credentials import secure_config_loader
             self.config, self.credential_manager = secure_config_loader('config.json')
 
             logging.info("Loading ignore lists...")
@@ -241,20 +255,16 @@ class CYTTerminalUI:
 
             # Find latest Kismet DB
             db_path_pattern = self.config['paths']['kismet_logs']
-            if os.path.isdir(db_path_pattern):
-                db_path_pattern = os.path.join(db_path_pattern, "*.kismet")
-
-            list_of_files = glob.glob(db_path_pattern)
-            if not list_of_files:
-                if os.path.exists("test_capture.kismet"):
-                    logging.warning("No live Kismet DB found. Using test_capture.kismet")
-                    self.latest_kismet_db = "test_capture.kismet"
-                else:
-                    logging.critical(f"No Kismet database files found at: {db_path_pattern}")
-                    return False
-            else:
-                self.latest_kismet_db = max(list_of_files, key=os.path.getctime)
+            self.latest_kismet_db, self.db_glob_pattern = find_latest_db_path(
+                db_path_pattern, fallback_path="test_capture.kismet")
+            if self.latest_kismet_db == "NOT_FOUND":
+                logging.critical(f"No Kismet database files found at: {self.db_glob_pattern}")
+                return False
             logging.info(f"Using Kismet database: {self.latest_kismet_db}")
+            self.db_freshness_minutes = self.config.get(
+                'kismet_health', {}).get('data_freshness_threshold_minutes', 5)
+            self.live_feed_window_seconds = self.config.get(
+                'ui_settings', {}).get('live_feed_window_seconds', 120)
 
             # AlertManager
             if ALERT_MANAGER_AVAILABLE:
@@ -286,7 +296,7 @@ class CYTTerminalUI:
             if health_config.get('enabled', False) and HEALTH_MONITOR_AVAILABLE:
                 try:
                     self.health_monitor = KismetHealthMonitor(
-                        db_path_pattern=self.config['paths']['kismet_logs'],
+                        db_path_pattern=self.db_glob_pattern or self.config['paths']['kismet_logs'],
                         startup_script=health_config.get('startup_script', './start_kismet_clean.sh'),
                         max_restart_attempts=health_config.get('max_restart_attempts', 3),
                         data_freshness_threshold_minutes=health_config.get('data_freshness_threshold_minutes', 5),
@@ -323,6 +333,16 @@ class CYTTerminalUI:
             logging.critical(f"Fatal error during TUI init: {e}", exc_info=True)
             return False
 
+    def _refresh_latest_kismet_db(self) -> None:
+        if not self.db_glob_pattern:
+            return
+        latest, _ = find_latest_db_path(self.db_glob_pattern, fallback_path="test_capture.kismet")
+        if latest == "NOT_FOUND":
+            return
+        if latest != self.latest_kismet_db:
+            self.latest_kismet_db = latest
+            logging.info(f"Switched to latest Kismet DB: {latest}")
+
     # -------------------------------------------------------------------
     # Main curses entry point
     # -------------------------------------------------------------------
@@ -347,15 +367,18 @@ class CYTTerminalUI:
 
         check_interval = self.config.get('timing', {}).get('check_interval', 60)
         list_update_interval = self.config.get('timing', {}).get('list_update_interval', 5)
+        db_refresh_interval = self.config.get('timing', {}).get('db_refresh_interval_cycles', 5)
         health_check_interval = self.config.get('kismet_health', {}).get('check_interval_cycles', 5)
         kismet_interface = self.config.get('kismet_health', {}).get('interface', 'wlan0mon')
         context_check_interval = self.config.get('context_engine', {}).get('poll_interval_seconds', 30)
         context_cycles = max(1, context_check_interval // check_interval)
+        self.top_n_limit = self.config.get('ui_settings', {}).get('tui_top_n', 50)
 
         try:
             while self.running:
                 # --- Process one monitoring cycle ---
-                self._process_cycle(list_update_interval, health_check_interval,
+                self._process_cycle(list_update_interval, db_refresh_interval,
+                                    health_check_interval,
                                     kismet_interface, context_cycles)
 
                 # --- Redraw screen ---
@@ -376,14 +399,19 @@ class CYTTerminalUI:
     # Monitoring cycle (one iteration of what CYTMonitorApp.run does)
     # -------------------------------------------------------------------
     def _process_cycle(self, list_update_interval: int,
+                       db_refresh_interval: int,
                        health_check_interval: int,
                        kismet_interface: str,
                        context_cycles: int) -> None:
         """Execute one monitoring cycle."""
         self.cycle_count += 1
         try:
+            if db_refresh_interval and self.cycle_count % db_refresh_interval == 0:
+                self._refresh_latest_kismet_db()
             with SecureKismetDB(self.latest_kismet_db) as db:
                 self.monitor.process_current_activity(db)
+                self.dashboard_stats = get_dashboard_stats(
+                    self.latest_kismet_db, self.db_freshness_minutes)
 
                 if self.cycle_count % list_update_interval == 0:
                     logging.info(f"Rotating tracking lists (cycle {self.cycle_count})")
@@ -427,8 +455,10 @@ class CYTTerminalUI:
     # -------------------------------------------------------------------
     def _fetch_device_list(self, db: SecureKismetDB) -> List[DeviceRow]:
         """Query the DB for current devices and flatten for display."""
-        boundaries = self.monitor.time_manager.get_time_boundaries()
-        devices = db.get_devices_by_time_range(boundaries['current_time'])
+        devices = db.get_live_devices(self.live_feed_window_seconds)
+        self.behavioral_threats = {}
+        behavior_threshold = self.config.get(
+            'behavioral_drone_detection', {}).get('confidence_threshold', 0.60)
         rows = []
         for dev in devices:
             mac = dev.get('mac', '')
@@ -436,15 +466,10 @@ class CYTTerminalUI:
                 continue
 
             device_data = dev.get('device_data') or {}
-            signal_data = device_data.get('kismet.device.base.signal', {})
-            signal_val = -100
-            if isinstance(signal_data, dict):
-                signal_val = signal_data.get(
-                    'kismet.common.signal.last_signal', -100)
-
-            channel = str(device_data.get('kismet.device.base.channel', ''))
-            manuf = device_data.get('kismet.device.base.manuf', '')
-            dev_type = device_data.get('kismet.device.base.type', dev.get('type', ''))
+            signal_val = dev.get('signal', -100)
+            channel = str(dev.get('channel', ''))
+            manuf = dev.get('manufacturer', '')
+            dev_type = dev.get('type', 'Unknown')
 
             last_time = dev.get('last_time', 0)
             try:
@@ -452,7 +477,12 @@ class CYTTerminalUI:
             except (OSError, ValueError):
                 last_seen = ''
 
-            threat = self._get_threat_level(mac, device_data)
+            behavioral_confidence = None
+            if self.monitor.behavioral_detector:
+                behavioral_confidence, _ = self.monitor.behavioral_detector.analyze_device(mac)
+                if behavioral_confidence >= behavior_threshold:
+                    self.behavioral_threats[mac] = behavioral_confidence
+            threat = self._get_threat_level(mac, device_data, behavioral_confidence, behavior_threshold)
 
             rows.append(DeviceRow(
                 mac=mac,
@@ -464,16 +494,19 @@ class CYTTerminalUI:
                 threat=threat
             ))
 
-        # Sort: threats first, then by signal strength (strongest first)
-        threat_order = {'drone': 0, 'behavioral': 1, 'persistent': 2, '': 3}
-        rows.sort(key=lambda r: (threat_order.get(r.threat, 3), r.signal))
-        return rows
+        return self._apply_filters(rows)
 
-    def _get_threat_level(self, mac: str, device_data: dict) -> str:
+    def _get_threat_level(self, mac: str, device_data: dict,
+                          behavioral_confidence: Optional[float],
+                          behavior_threshold: float) -> str:
         """Determine threat coloring for a device."""
         # Drone OUI match
         if self.monitor.check_drone_threat(mac):
             return "drone"
+
+        if (behavioral_confidence is not None and
+                behavioral_confidence >= behavior_threshold):
+            return "behavioral"
 
         # Persistence check across tracking buckets
         score = 0
@@ -487,6 +520,33 @@ class CYTTerminalUI:
             return "persistent"
 
         return ""
+
+    def _apply_filters(self, rows: List[DeviceRow]) -> List[DeviceRow]:
+        if self.filter_mode == "threats":
+            rows = [r for r in rows if r.threat]
+        elif self.filter_mode == "signal_top":
+            rows.sort(key=lambda r: -r.signal)
+            return rows[:self.top_n_limit]
+        elif self.filter_mode == "ap":
+            rows = [r for r in rows if self._device_type_category(r.dev_type) == "ap"]
+        elif self.filter_mode == "client":
+            rows = [r for r in rows if self._device_type_category(r.dev_type) == "client"]
+
+        if self.sort_mode == "signal":
+            rows.sort(key=lambda r: -r.signal)
+        else:
+            threat_order = {'drone': 0, 'behavioral': 1, 'persistent': 2, '': 3}
+            rows.sort(key=lambda r: (threat_order.get(r.threat, 3), -r.signal))
+        return rows
+
+    @staticmethod
+    def _device_type_category(dev_type: str) -> str:
+        dt = (dev_type or "").lower()
+        if "ap" in dt or "access" in dt:
+            return "ap"
+        if "client" in dt or "station" in dt:
+            return "client"
+        return "other"
 
     # -------------------------------------------------------------------
     # Keyboard polling during sleep interval
@@ -515,6 +575,14 @@ class CYTTerminalUI:
                 self.scroll_offset = 0
             elif key == ord('\t'):
                 self.current_view = 2 if self.current_view == 1 else 1
+                self.scroll_offset = 0
+            elif key in (ord('h'), ord('H'), ord('?')):
+                self.show_help = not self.show_help
+            elif key in (ord('f'), ord('F')):
+                self._cycle_filter_mode()
+                self.scroll_offset = 0
+            elif key in (ord('s'), ord('S')):
+                self.sort_mode = "signal" if self.sort_mode == "threat" else "threat"
                 self.scroll_offset = 0
             elif key == curses.KEY_UP:
                 self.scroll_offset = max(0, self.scroll_offset - 1)
@@ -551,6 +619,8 @@ class CYTTerminalUI:
                 self._draw_dashboard(stdscr, content_top, content_height, max_x)
 
             self._draw_status_bar(stdscr, max_y, max_x)
+            if self.show_help:
+                self._draw_help(stdscr, max_y, max_x)
             stdscr.refresh()
         except curses.error:
             pass  # Terminal resize or write-past-end; ignore
@@ -575,6 +645,12 @@ class CYTTerminalUI:
             if max_x > 50:
                 stdscr.addstr(0, max_x - len(clock) - 1, clock, curses.color_pair(4))
 
+            # Legend (only if there's room)
+            legend = "f=filter s=sort h=help"
+            legend_x = max_x - len(clock) - len(legend) - 3
+            if legend_x > col + 2:
+                stdscr.addstr(0, legend_x, legend, curses.color_pair(7))
+
             # Separator line
             stdscr.addstr(1, 0, "\u2500" * min(max_x - 1, max_x), curses.color_pair(4))
         except curses.error:
@@ -593,7 +669,10 @@ class CYTTerminalUI:
                    f"Cycle: {self.cycle_count} | "
                    f"Devices: {len(self.device_rows)} | "
                    f"Up: {uptime_h}h{uptime_m:02d}m | "
-                   f"Next: {countdown}s ")
+                   f"Filter: {self._filter_label()} | "
+                   f"Sort: {self.sort_mode} | "
+                   f"Next: {countdown}s | "
+                   f"Keys: 1/2 Tab Up/Down PgUp PgDn f s h q")
 
             # Pad to full width
             bar = bar.ljust(max_x - 1)[:max_x - 1]
@@ -607,15 +686,17 @@ class CYTTerminalUI:
     def _draw_live_feed(self, stdscr, top: int, height: int, max_x: int) -> None:
         """Draw the scrolling device table."""
         # Column header
-        hdr = f" {'MAC':<20}{'Sig':>5} {'Ch':>4}  {'Type':<16}{'Manufacturer':<20}{'Last Seen':>9}"
+        hdr = f" {'T':<2}{'MAC':<18}{'Sig':>5} {'Ch':>4}  {'Type':<14}{'Manufacturer':<20}{'Last Seen':>9}"
         try:
             stdscr.addstr(top, 0, hdr[:max_x - 1], curses.A_BOLD | curses.color_pair(4))
             stdscr.addstr(top + 1, 0, "\u2500" * min(max_x - 1, max_x), curses.color_pair(4))
+            legend = "Legend: D=Drone B=Behavioral P=Persistent | f=filter s=sort h=help"
+            stdscr.addstr(top + 2, 0, legend[:max_x - 1], curses.color_pair(7))
         except curses.error:
             pass
 
-        data_top = top + 2
-        data_height = height - 2
+        data_top = top + 3
+        data_height = height - 3
         if data_height <= 0:
             return
 
@@ -630,8 +711,14 @@ class CYTTerminalUI:
             if y >= top + height:
                 break
 
-            line = (f" {row.mac:<20}{row.signal:>5} {row.channel:>4}  "
-                    f"{row.dev_type:<16}{row.manufacturer:<20}{row.last_seen:>9}")
+            threat_code = {
+                "drone": "D",
+                "behavioral": "B",
+                "persistent": "P",
+                "": ""
+            }.get(row.threat, "")
+            line = (f" {threat_code:<2}{row.mac:<18}{row.signal:>5} {row.channel:>4}  "
+                    f"{row.dev_type:<14}{row.manufacturer:<20}{row.last_seen:>9}")
             line = line[:max_x - 1]
 
             attr = curses.A_NORMAL
@@ -740,18 +827,46 @@ class CYTTerminalUI:
                 pass
             y += 1
 
+        db_status = self.dashboard_stats.get('db_status', 'DISCONNECTED')
+        db_freshness = self.dashboard_stats.get('db_freshness', 'UNKNOWN')
+        db_health_line = (
+            f" Telemetry:{get_dashboard_health_label(self.dashboard_stats):>11}"
+            f" | {self._format_db_freshness()}"
+        )
+        try:
+            stdscr.addstr(
+                y, 1, db_health_line[:half_x - 2],
+                self._db_status_attr(db_status, db_freshness)
+            )
+        except curses.error:
+            pass
+        y += 1
+
         # --- Right column: Recent Alerts ---
         ry = top
+        header_text = self._alerts_header_text()
+        header_attr = self._alerts_header_attr()
         try:
-            stdscr.addstr(ry, half_x + 1, "=== RECENT ALERTS ===",
-                          curses.A_BOLD | curses.color_pair(2))
+            stdscr.addstr(ry, half_x + 1, header_text[:max_x - half_x - 2],
+                          header_attr)
+        except curses.error:
+            pass
+        ry += 1
+
+        alert_counts = self._count_alert_levels()
+        summary = (f" CRIT: {alert_counts['CRIT']}  "
+                   f"WARN: {alert_counts['WARN']}  "
+                   f"INFO: {alert_counts['INFO']}")
+        try:
+            stdscr.addstr(ry, half_x + 2, summary[:max_x - half_x - 3],
+                          curses.color_pair(7))
         except curses.error:
             pass
         ry += 1
 
         alert_list = list(self.alert_lines)
         # Show most recent alerts (bottom of deque = newest)
-        max_alerts = height - 2
+        max_alerts = max(0, height - 3)
         recent = alert_list[-max_alerts:] if len(alert_list) > max_alerts else alert_list
 
         if not recent:
@@ -777,6 +892,93 @@ class CYTTerminalUI:
                     pass
                 ry += 1
 
+    def _count_alert_levels(self) -> Dict[str, int]:
+        counts = {"CRIT": 0, "WARN": 0, "INFO": 0}
+        for line in self.alert_lines:
+            if "CRIT:" in line:
+                counts["CRIT"] += 1
+            elif "WARN:" in line:
+                counts["WARN"] += 1
+            else:
+                counts["INFO"] += 1
+        return counts
+
+    def _format_db_freshness(self) -> str:
+        freshness = self.dashboard_stats.get('db_freshness', 'UNKNOWN')
+        age = self.dashboard_stats.get('db_age_minutes')
+        if age is None:
+            return str(freshness)
+        return f"{freshness} ({age} min)"
+
+    def _db_status_style(self, db_status: str, freshness: str) -> str:
+        if db_status == 'CONNECTED' and freshness == 'ACTIVE':
+            return "healthy"
+        if db_status == 'CONNECTED' and freshness in ('STALE', 'UNKNOWN'):
+            return "warning"
+        return "error"
+
+    def _alerts_header_text(self) -> str:
+        label = get_dashboard_health_label(self.dashboard_stats)
+        if label == "HEALTHY":
+            return "=== RECENT ALERTS ==="
+        return f"=== RECENT ALERTS | TELEMETRY {label} ==="
+
+    def _alerts_header_attr(self):
+        tone = get_dashboard_health_tone(self.dashboard_stats)
+        if tone == "healthy":
+            return curses.A_BOLD | curses.color_pair(2)
+        if tone == "warning":
+            return curses.A_BOLD | curses.color_pair(2)
+        return curses.A_BOLD | curses.color_pair(1)
+
+    def _db_status_attr(self, db_status: str, freshness: str):
+        style = self._db_status_style(db_status, freshness)
+        if style == "healthy":
+            return curses.color_pair(3) | curses.A_BOLD
+        if style == "warning":
+            return curses.color_pair(2) | curses.A_BOLD
+        return curses.color_pair(1) | curses.A_BOLD
+
+    def _filter_label(self) -> str:
+        labels = {
+            "all": "all",
+            "threats": "threats",
+            "signal_top": f"top{self.top_n_limit}",
+            "ap": "ap",
+            "client": "client"
+        }
+        return labels.get(self.filter_mode, self.filter_mode)
+
+    def _cycle_filter_mode(self) -> None:
+        modes = ["all", "threats", "signal_top", "ap", "client"]
+        idx = modes.index(self.filter_mode) if self.filter_mode in modes else 0
+        self.filter_mode = modes[(idx + 1) % len(modes)]
+
+    def _draw_help(self, stdscr, max_y: int, max_x: int) -> None:
+        help_lines = [
+            "CYT-NG TUI HELP",
+            "",
+            "Views:     1 = Live Feed, 2 = Dashboard, Tab = toggle",
+            "Scroll:    Up/Down, PgUp/PgDn",
+            "Filters:   f = cycle (all, threats, top-N, ap, client)",
+            "Sorting:   s = toggle (threat | signal)",
+            "Help:      h or ?",
+            "Quit:      q",
+            "",
+            "Threats:   D=Drone  B=Behavioral  P=Persistent",
+        ]
+        box_width = min(max_x - 4, 64)
+        box_height = len(help_lines) + 2
+        start_y = max(2, (max_y - box_height) // 2)
+        start_x = max(2, (max_x - box_width) // 2)
+        try:
+            for i in range(box_height):
+                stdscr.addstr(start_y + i, start_x, " " * box_width, curses.color_pair(5))
+            for i, line in enumerate(help_lines):
+                truncated = line[:box_width - 4]
+                stdscr.addstr(start_y + 1 + i, start_x + 2, truncated, curses.A_BOLD)
+        except curses.error:
+            pass
     # -------------------------------------------------------------------
     # Shutdown
     # -------------------------------------------------------------------

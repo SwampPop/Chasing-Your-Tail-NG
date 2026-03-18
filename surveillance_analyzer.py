@@ -26,7 +26,6 @@ from surveillance_detector import (SurveillanceDetector,
                                    load_appearances_from_kismet,
                                    SuspiciousDevice)
 from gps_tracker import GPSTracker, KMLExporter, simulate_gps_data
-from secure_credentials import secure_config_loader
 from report_generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -135,11 +134,13 @@ class SurveillanceAnalyzer:
             self.detector.analyze_surveillance_patterns())
 
         # Correlate devices with GPS locations
-        cross_location = self.gps_tracker.get_devices_across_locations()
-        if cross_location:
-            logger.info(
-                f"Devices seen across multiple locations: "
-                f"{len(cross_location)}")
+        gps_tracker = getattr(self, 'gps_tracker', None)
+        if gps_tracker is not None:
+            cross_location = gps_tracker.get_devices_across_locations()
+            if cross_location:
+                logger.info(
+                    f"Devices seen across multiple locations: "
+                    f"{len(cross_location)}")
 
         logger.info(
             f"Analysis complete: {len(self.suspicious_devices)} "
@@ -149,7 +150,7 @@ class SurveillanceAnalyzer:
     def analyze_for_stalking(
             self, min_persistence_score: float = 0.7) -> list:
         """Specifically analyze for stalking patterns."""
-        if not self.suspicious_devices:
+        if not getattr(self, 'suspicious_devices', None):
             self.run_full_analysis()
 
         stalking_candidates = []
@@ -300,6 +301,8 @@ def _find_latest_kismet_db(config: dict) -> str:
 
 
 def main():
+    from secure_credentials import secure_config_loader
+
     parser = argparse.ArgumentParser(
         description="CYT Surveillance Analysis Tool")
     parser.add_argument(
