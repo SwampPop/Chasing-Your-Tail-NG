@@ -19,6 +19,19 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+get_vm_kismet_logs_dir() {
+    python3 - <<'PY' "$SCRIPT_DIR/config.json"
+import json
+import sys
+
+with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+    config = json.load(handle)
+
+paths = config.get("paths", {})
+print(paths.get("kismet_logs_vm") or "/home/parallels/CYT/logs/kismet")
+PY
+}
+
 # ============================================
 # STEP 1: Prevent macOS sleep (lid-closed mode)
 # ============================================
@@ -112,16 +125,19 @@ fi
 echo ""
 echo -e "${BLUE}▶ Step 4: Checking Kismet in VM...${NC}"
 
+VM_KISMET_LOGS=$(get_vm_kismet_logs_dir)
 KISMET_PID=$(prlctl exec CYT-Kali "pgrep -x kismet" 2>/dev/null || true)
 if [ -n "$KISMET_PID" ]; then
     echo -e "${GREEN}   ✓${NC} Kismet is running (PID: $KISMET_PID)"
+    echo -e "${GREEN}   ✓${NC} Log output: $VM_KISMET_LOGS"
 else
     echo "   Starting Kismet..."
-    prlctl exec CYT-Kali "sudo /usr/bin/kismet -c wlan0 --daemonize" 2>/dev/null
+    prlctl exec CYT-Kali "mkdir -p \"$VM_KISMET_LOGS\" && sudo /usr/bin/kismet -c wlan0 --daemonize --log-prefix \"$VM_KISMET_LOGS\"" 2>/dev/null
     sleep 5
     KISMET_PID=$(prlctl exec CYT-Kali "pgrep -x kismet" 2>/dev/null || true)
     if [ -n "$KISMET_PID" ]; then
         echo -e "${GREEN}   ✓${NC} Kismet started (PID: $KISMET_PID)"
+        echo -e "${GREEN}   ✓${NC} Log output: $VM_KISMET_LOGS"
     else
         echo -e "${RED}   ✗${NC} Failed to start Kismet"
     fi

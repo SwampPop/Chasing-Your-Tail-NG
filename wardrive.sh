@@ -13,6 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 VM_NAME="CYT-Kali"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 print_banner() {
     echo ""
@@ -32,6 +33,19 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[✗]${NC} $1"
+}
+
+get_vm_kismet_logs_dir() {
+    python3 - <<'PY' "$SCRIPT_DIR/config.json"
+import json
+import sys
+
+with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+    config = json.load(handle)
+
+paths = config.get("paths", {})
+print(paths.get("kismet_logs_vm") or "/home/parallels/CYT/logs/kismet")
+PY
 }
 
 start_wardrive() {
@@ -91,16 +105,18 @@ start_wardrive() {
 
     # Step 4: Check/Start Kismet
     echo "[4/5] Checking Kismet..."
+    VM_KISMET_LOGS="$(get_vm_kismet_logs_dir)"
     KISMET_PID=$(prlctl exec "$VM_NAME" "pgrep -x kismet" 2>/dev/null || echo "")
     if [ -n "$KISMET_PID" ]; then
         print_status "Kismet already running (PID $KISMET_PID)"
     else
         print_warning "Starting Kismet..."
-        prlctl exec "$VM_NAME" "cd /home/parallels/CYT/logs/kismet && kismet -c wlan0 --daemonize" 2>/dev/null || true
+        prlctl exec "$VM_NAME" "mkdir -p \"$VM_KISMET_LOGS\" && kismet -c wlan0 --daemonize --log-prefix \"$VM_KISMET_LOGS\"" 2>/dev/null || true
         sleep 5
         KISMET_PID=$(prlctl exec "$VM_NAME" "pgrep -x kismet" 2>/dev/null || echo "")
         if [ -n "$KISMET_PID" ]; then
             print_status "Kismet started (PID $KISMET_PID)"
+            print_status "Kismet logs writing to $VM_KISMET_LOGS"
         else
             print_error "Failed to start Kismet"
         fi
@@ -145,12 +161,13 @@ stop_wardrive() {
 
     # Show stats
     echo "[2/2] Session summary..."
+    VM_KISMET_LOGS="$(get_vm_kismet_logs_dir)"
 
     # Get network count from Kismet
-    NETWORK_COUNT=$(prlctl exec "$VM_NAME" "sqlite3 /home/parallels/CYT/logs/kismet/*.kismet 'SELECT COUNT(*) FROM devices WHERE type LIKE \"%AP%\"' 2>/dev/null | tail -1" 2>/dev/null || echo "?")
+    NETWORK_COUNT=$(prlctl exec "$VM_NAME" "sqlite3 \"$VM_KISMET_LOGS\"/*.kismet 'SELECT COUNT(*) FROM devices WHERE type LIKE \"%AP%\"' 2>/dev/null | tail -1" 2>/dev/null || echo "?")
 
     # Get database file
-    DB_FILE=$(prlctl exec "$VM_NAME" "ls -t /home/parallels/CYT/logs/kismet/*.kismet 2>/dev/null | head -1" 2>/dev/null || echo "unknown")
+    DB_FILE=$(prlctl exec "$VM_NAME" "ls -t \"$VM_KISMET_LOGS\"/*.kismet 2>/dev/null | head -1" 2>/dev/null || echo "unknown")
     DB_SIZE=$(prlctl exec "$VM_NAME" "ls -lh $DB_FILE 2>/dev/null | awk '{print \$5}'" 2>/dev/null || echo "?")
 
     echo ""
@@ -194,9 +211,11 @@ status_wardrive() {
     fi
 
     # Check Kismet
+    VM_KISMET_LOGS="$(get_vm_kismet_logs_dir)"
     KISMET_PID=$(prlctl exec "$VM_NAME" "pgrep -x kismet" 2>/dev/null || echo "")
     if [ -n "$KISMET_PID" ]; then
         print_status "Kismet running (PID $KISMET_PID)"
+        print_status "Kismet logs: $VM_KISMET_LOGS"
     else
         print_error "Kismet not running"
     fi
@@ -211,7 +230,7 @@ status_wardrive() {
     fi
 
     # Network count
-    NETWORK_COUNT=$(prlctl exec "$VM_NAME" "sqlite3 /home/parallels/CYT/logs/kismet/*.kismet 'SELECT COUNT(*) FROM devices WHERE type LIKE \"%AP%\"' 2>/dev/null | tail -1" 2>/dev/null || echo "?")
+    NETWORK_COUNT=$(prlctl exec "$VM_NAME" "sqlite3 \"$VM_KISMET_LOGS\"/*.kismet 'SELECT COUNT(*) FROM devices WHERE type LIKE \"%AP%\"' 2>/dev/null | tail -1" 2>/dev/null || echo "?")
     echo ""
     echo "Networks captured so far: $NETWORK_COUNT"
     echo ""

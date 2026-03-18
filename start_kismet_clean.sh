@@ -12,16 +12,40 @@ fi
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$DIR"
 
+get_log_prefix() {
+  if [ -n "${KISMET_LOG_PREFIX:-}" ]; then
+    echo "$KISMET_LOG_PREFIX"
+    return
+  fi
+
+  if [ -f "$DIR/config.json" ]; then
+    python3 - <<'PY' "$DIR/config.json"
+import json
+import sys
+
+with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+    config = json.load(handle)
+
+paths = config.get("paths", {})
+print(paths.get("kismet_logs_vm") or paths.get("kismet_logs") or "logs/kismet")
+PY
+    return
+  fi
+
+  echo "$DIR/logs/kismet"
+}
+
 # --- GET INTERFACE FROM ARGUMENT (ADDED) ---
 # Use the first command-line argument as the interface, or default to 'wlan0'.
 INTERFACE=${1:-wlan0}
+LOG_PREFIX="$(get_log_prefix)"
 echo "Starting Kismet on interface: $INTERFACE"
+echo "Using log prefix: $LOG_PREFIX"
 
 # Start Kismet directly
 # Note: We don't need 'sudo' here because we already checked for root.
-# Change to the log directory so Kismet writes its files there
-cd "$DIR/logs/kismet/"
-/usr/bin/kismet -c "$INTERFACE" --daemonize
+mkdir -p "$LOG_PREFIX"
+/usr/bin/kismet -c "$INTERFACE" --daemonize --log-prefix "$LOG_PREFIX"
 
 # --- INTELLIGENT WAIT (CHANGED) ---
 # Loop for up to 10 seconds, checking every second for the Kismet process.
