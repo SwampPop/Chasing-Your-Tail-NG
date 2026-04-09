@@ -37,7 +37,7 @@ fi
 echo ""
 echo "2. Python Dependencies"
 MISSING_DEPS=""
-for dep in kivy cryptography requests; do
+for dep in cryptography requests; do
     if python3 -c "import $dep" 2>/dev/null; then
         pass "$dep installed"
     else
@@ -45,6 +45,16 @@ for dep in kivy cryptography requests; do
         MISSING_DEPS="$MISSING_DEPS $dep"
     fi
 done
+
+# GUI dep — required on macOS, optional on Linux (TUI/CLI work without it)
+if python3 -c "import kivy" 2>/dev/null; then
+    pass "kivy installed (GUI available)"
+elif [ "$(uname)" = "Darwin" ]; then
+    fail "kivy not installed (required for GUI on macOS)"
+    MISSING_DEPS="$MISSING_DEPS kivy"
+else
+    warn "kivy not installed (GUI unavailable — use TUI or CLI instead)"
+fi
 
 # Optional deps
 for dep in apprise geopy simplekml folium; do
@@ -59,10 +69,14 @@ done
 echo ""
 echo "3. Kismet Database"
 DB_PATH=$(python3 -c "
-import json
+import json, platform
 with open('$CONFIG') as f:
     c = json.load(f)
-print(c.get('paths', {}).get('kismet_logs', ''))
+paths = c.get('paths', {})
+if platform.system() == 'Linux':
+    print(paths.get('kismet_logs_vm') or paths.get('kismet_logs', ''))
+else:
+    print(paths.get('kismet_logs', ''))
 " 2>/dev/null || echo "")
 
 if [ -n "$DB_PATH" ]; then
@@ -89,14 +103,14 @@ echo ""
 echo "4. Ignore Lists"
 IGNORE_DIR="$SCRIPT_DIR/ignore_lists"
 if [ -f "$IGNORE_DIR/mac_list.txt" ]; then
-    MAC_COUNT=$(grep -cv '^#\|^$' "$IGNORE_DIR/mac_list.txt" 2>/dev/null || echo 0)
+    MAC_COUNT=$(grep -cEv '^#|^$' "$IGNORE_DIR/mac_list.txt" 2>/dev/null || echo "0")
     pass "MAC ignore list: $MAC_COUNT entries"
 else
     warn "MAC ignore list not found (all devices will be analyzed)"
 fi
 
 if [ -f "$IGNORE_DIR/ssid_list.txt" ]; then
-    SSID_COUNT=$(grep -cv '^#\|^$' "$IGNORE_DIR/ssid_list.txt" 2>/dev/null || echo 0)
+    SSID_COUNT=$(grep -cEv '^#|^$' "$IGNORE_DIR/ssid_list.txt" 2>/dev/null || echo "0")
     pass "SSID ignore list: $SSID_COUNT entries"
 else
     warn "SSID ignore list not found"
