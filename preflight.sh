@@ -103,14 +103,14 @@ echo ""
 echo "4. Ignore Lists"
 IGNORE_DIR="$SCRIPT_DIR/ignore_lists"
 if [ -f "$IGNORE_DIR/mac_list.txt" ]; then
-    MAC_COUNT=$(grep -cEv '^#|^$' "$IGNORE_DIR/mac_list.txt" 2>/dev/null || echo "0")
+    MAC_COUNT=$(grep -Ev '^#|^$' "$IGNORE_DIR/mac_list.txt" 2>/dev/null | wc -l | tr -d ' ')
     pass "MAC ignore list: $MAC_COUNT entries"
 else
     warn "MAC ignore list not found (all devices will be analyzed)"
 fi
 
 if [ -f "$IGNORE_DIR/ssid_list.txt" ]; then
-    SSID_COUNT=$(grep -cEv '^#|^$' "$IGNORE_DIR/ssid_list.txt" 2>/dev/null || echo "0")
+    SSID_COUNT=$(grep -Ev '^#|^$' "$IGNORE_DIR/ssid_list.txt" 2>/dev/null | wc -l | tr -d ' ')
     pass "SSID ignore list: $SSID_COUNT entries"
 else
     warn "SSID ignore list not found"
