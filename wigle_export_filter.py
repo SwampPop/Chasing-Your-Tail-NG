@@ -67,7 +67,7 @@ class WiGLEExportFilter:
                     ssid = device.get('dot11.device', {}).get(
                         'dot11.device.last_beaconed_ssid_record', {}).get(
                         'dot11.advertisedssid', {}).get('ssid', '')
-                except:
+                except (json.JSONDecodeError, AttributeError, TypeError):
                     ssid = ''
                 
                 # Check exclusions
@@ -85,7 +85,7 @@ class WiGLEExportFilter:
                 try:
                     channel = device.get('kismet.device.base.channel', '0')
                     crypt = device.get('kismet.device.base.crypt', 'Unknown')
-                except:
+                except (AttributeError, TypeError):
                     channel = '0'
                     crypt = 'Unknown'
                 

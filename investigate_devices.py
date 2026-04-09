@@ -28,8 +28,8 @@ def find_latest_kismet_db():
             files = glob.glob(db_path)
             if files:
                 return max(files, key=os.path.getctime)
-    except:
-        pass
+    except (OSError, ValueError) as e:
+        print(f"Warning: Error finding database: {e}")
 
     print("ERROR: Could not find Kismet database")
     print("Make sure you're running from the CYT directory with config.json")

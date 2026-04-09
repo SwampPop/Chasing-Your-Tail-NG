@@ -123,8 +123,8 @@ def get_status():
                             "lon": lon,
                             "type": "CLOSE_CONTACT"
                         })
-                except:
-                    pass
+                except (KeyError, TypeError) as e:
+                    logger.debug(f"Skipping device {mac} signal data: {e}")
 
             # 2. Activity Counts
             count_5m = len(db.get_mac_addresses_by_time_range(now - 300, now))

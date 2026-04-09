@@ -2,6 +2,7 @@ import requests
 import logging
 import os
 import platform
+import subprocess
 import threading
 
 # Load secure config to get credentials
@@ -38,12 +39,15 @@ class AlertManager:
         # Clean text for speech (remove special chars)
         clean_text = text.replace("[!!!]", "Alert").replace("\n", ". ")
         
-        if system == "Darwin": # macOS
-            os.system(f'say "{clean_text}" &')
-        elif system == "Linux": # Raspberry Pi
-            # On Pi, we usually use 'espeak' or just a buzzer
-            # os.system(f'espeak "{clean_text}" &')
-            pass
+        if system == "Darwin":
+            subprocess.Popen(["say", clean_text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif system == "Linux":
+            for cmd in ["espeak-ng", "espeak"]:
+                try:
+                    subprocess.Popen([cmd, clean_text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    break
+                except FileNotFoundError:
+                    continue
 
     def _send_telegram(self, text):
         """Push notification to phone"""

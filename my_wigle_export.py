@@ -80,7 +80,7 @@ def export_filtered():
                         break
                 channel = str(d.get("kismet.device.base.channel", "0"))
                 crypt = d.get("kismet.device.base.crypt", "Unknown")
-            except:
+            except (json.JSONDecodeError, KeyError, TypeError):
                 pass
             
             # Skip excluded SSIDs
