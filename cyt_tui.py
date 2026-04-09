@@ -38,6 +38,7 @@ from lib.gui_logic import (
     get_dashboard_health_label,
     get_dashboard_health_tone,
     get_dashboard_stats,
+    get_kismet_logs_path,
 )
 
 # Optional CYT imports
@@ -254,7 +255,7 @@ class CYTTerminalUI:
             logging.info(f"Loaded {len(self.ignore_list)} MACs, {len(self.probe_ignore_list)} SSIDs to ignore")
 
             # Find latest Kismet DB
-            db_path_pattern = self.config['paths']['kismet_logs']
+            db_path_pattern = get_kismet_logs_path(self.config)
             self.latest_kismet_db, self.db_glob_pattern = find_latest_db_path(
                 db_path_pattern, fallback_path="test_capture.kismet")
             if self.latest_kismet_db == "NOT_FOUND":
@@ -296,7 +297,7 @@ class CYTTerminalUI:
             if health_config.get('enabled', False) and HEALTH_MONITOR_AVAILABLE:
                 try:
                     self.health_monitor = KismetHealthMonitor(
-                        db_path_pattern=self.db_glob_pattern or self.config['paths']['kismet_logs'],
+                        db_path_pattern=self.db_glob_pattern or get_kismet_logs_path(self.config),
                         startup_script=health_config.get('startup_script', './start_kismet_clean.sh'),
                         max_restart_attempts=health_config.get('max_restart_attempts', 3),
                         data_freshness_threshold_minutes=health_config.get('data_freshness_threshold_minutes', 5),

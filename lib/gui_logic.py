@@ -2,6 +2,7 @@
 Business logic for the CYT GUI.
 """
 import os
+import platform
 import time
 import sqlite3
 import logging
@@ -13,6 +14,17 @@ from lib.watchlist_manager import DatabaseQueryError
 
 class DatabaseNotFound(Exception):
     pass
+
+
+def get_kismet_logs_path(config):
+    """Return the correct Kismet logs path for the current platform.
+
+    Uses 'kismet_logs_vm' on Linux (Kali VM), 'kismet_logs' on macOS.
+    """
+    paths = config.get('paths', {})
+    if platform.system() == 'Linux':
+        return paths.get('kismet_logs_vm') or paths.get('kismet_logs', '')
+    return paths.get('kismet_logs', '')
 
 
 def resolve_db_glob(path_pattern):

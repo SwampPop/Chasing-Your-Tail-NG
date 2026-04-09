@@ -18,6 +18,7 @@ from secure_database import SecureKismetDB
 from secure_main_logic import SecureCYTMonitor
 from secure_credentials import secure_config_loader
 from lib import history_manager
+from lib.gui_logic import get_kismet_logs_path
 from config_validator import validate_config_file
 from kismet_health_monitor import KismetHealthMonitor
 
@@ -101,7 +102,7 @@ class CYTMonitorApp:
             self.ignore_list, self.probe_ignore_list = load_ignore_lists(self.config)
             logging.info(f"Loaded {len(self.ignore_list)} MACs and {len(self.probe_ignore_list)} SSIDs to ignore lists.")
             
-            db_path_pattern = self.config['paths']['kismet_logs']
+            db_path_pattern = get_kismet_logs_path(self.config)
             logging.info(f"Searching for Kismet databases with pattern: {db_path_pattern}")
             
             # Check if it's a directory or a file pattern
@@ -155,7 +156,7 @@ class CYTMonitorApp:
                 logging.info("Initializing Kismet health monitor...")
                 try:
                     self.health_monitor = KismetHealthMonitor(
-                        db_path_pattern=self.config['paths']['kismet_logs'],
+                        db_path_pattern=get_kismet_logs_path(self.config),
                         startup_script=health_config.get('startup_script', './start_kismet_clean.sh'),
                         max_restart_attempts=health_config.get('max_restart_attempts', 3),
                         data_freshness_threshold_minutes=health_config.get('data_freshness_threshold_minutes', 5),
