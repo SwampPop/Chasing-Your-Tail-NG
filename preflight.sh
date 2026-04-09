@@ -82,8 +82,11 @@ else:
 if [ -n "$DB_PATH" ]; then
     DB_FILES=$(find "$DB_PATH" -maxdepth 1 -name "*.kismet" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
     # macOS fallback (find -printf not available)
+    # Use xargs -r so ls is NOT called when find returns nothing
+    # (without -r, xargs runs "ls -t" with no args, which lists the
+    #  current directory and can return unrelated files like HANDOFF.md)
     if [ -z "$DB_FILES" ]; then
-        DB_FILES=$(find "$DB_PATH" -maxdepth 1 -name "*.kismet" -type f 2>/dev/null | xargs ls -t 2>/dev/null | head -1)
+        DB_FILES=$(find "$DB_PATH" -maxdepth 1 -name "*.kismet" -type f 2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)
     fi
     if [ -n "$DB_FILES" ]; then
         DB_AGE=$(python3 -c "
@@ -150,6 +153,58 @@ elif [ "$(uname)" = "Darwin" ]; then
     fi
 else
     warn "gpsd not installed (location features disabled)"
+fi
+
+# 7. Kismet log directory
+echo ""
+echo "7. Kismet Log Directory"
+if [ -n "$DB_PATH" ]; then
+    if [ -d "$DB_PATH" ]; then
+        pass "Log directory exists: $DB_PATH"
+    else
+        warn "Log directory missing — creating now: $DB_PATH"
+        mkdir -p "$DB_PATH" && pass "Log directory created" || fail "Could not create log directory"
+    fi
+else
+    warn "kismet_logs path not configured in config.json"
+fi
+
+# 8. Wireless interface & monitor mode
+echo ""
+echo "8. Wireless Interface"
+KISMET_IFACE=$(python3 -c "
+import json
+with open('$CONFIG') as f:
+    c = json.load(f)
+print(c.get('kismet_health', {}).get('interface', 'wlan0'))
+" 2>/dev/null || echo "wlan0")
+
+if ip link show "$KISMET_IFACE" >/dev/null 2>&1; then
+    pass "Interface $KISMET_IFACE exists"
+    # Check monitor mode
+    if iw dev "$KISMET_IFACE" info 2>/dev/null | grep -q "type monitor"; then
+        pass "$KISMET_IFACE is in monitor mode"
+    else
+        warn "$KISMET_IFACE is NOT in monitor mode — Kismet will attempt to set this, but NetworkManager may interfere"
+        # Check if NetworkManager is managing this interface
+        if command -v nmcli >/dev/null 2>&1; then
+            NM_STATE=$(nmcli -f DEVICE,STATE dev 2>/dev/null | awk -v iface="$KISMET_IFACE" '$1==iface {print $2}')
+            if [ "$NM_STATE" = "connected" ] || [ "$NM_STATE" = "disconnected" ] || [ "$NM_STATE" = "unavailable" ]; then
+                warn "NetworkManager is managing $KISMET_IFACE (state: $NM_STATE) — run: sudo nmcli dev set $KISMET_IFACE managed no"
+            else
+                pass "NetworkManager is NOT managing $KISMET_IFACE"
+            fi
+        fi
+    fi
+else
+    fail "Interface $KISMET_IFACE not found — run 'ip link show' to see available interfaces"
+fi
+
+# Check if Kismet is running
+if pgrep -x kismet >/dev/null 2>&1 || pgrep -f "kismet" >/dev/null 2>&1; then
+    pass "Kismet process is running"
+else
+    warn "Kismet is not running — start it before launching the TUI"
 fi
 
 # Summary

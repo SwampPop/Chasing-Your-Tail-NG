@@ -42,6 +42,27 @@ LOG_PREFIX="$(get_log_prefix)"
 echo "Starting Kismet on interface: $INTERFACE"
 echo "Using log prefix: $LOG_PREFIX"
 
+# --- STOP NETWORKMANAGER INTERFERENCE (ADDED) ---
+# After a hard kill (-9), NetworkManager reclaims the interface and prevents
+# Kismet from putting it into monitor mode — resulting in 0 captured devices.
+# These commands yield control of the interface back to Kismet.
+echo "Releasing $INTERFACE from NetworkManager..."
+nmcli dev set "$INTERFACE" managed no 2>/dev/null || true
+
+# Kill wpa_supplicant, dhclient, and other processes that hold the interface.
+# airmon-ng check kill is the cleanest way to do this.
+if command -v airmon-ng >/dev/null 2>&1; then
+    echo "Killing interfering processes (airmon-ng check kill)..."
+    airmon-ng check kill 2>/dev/null || true
+else
+    # Fallback if airmon-ng is not installed
+    pkill -f wpa_supplicant 2>/dev/null || true
+    pkill -f dhclient 2>/dev/null || true
+fi
+
+echo "Waiting 1 second for interface to settle..."
+sleep 1
+
 # Start Kismet directly
 # Note: We don't need 'sudo' here because we already checked for root.
 mkdir -p "$LOG_PREFIX"
