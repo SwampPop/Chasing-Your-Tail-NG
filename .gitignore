@@ -17,6 +17,7 @@ logs/
 # Temporary databases
 dummy_kismet.db
 cyt_history.db
+watchlist.db
 # Test artifacts
 tests/__pycache__/
 secure_credentials/
