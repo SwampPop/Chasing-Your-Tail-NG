@@ -175,5 +175,8 @@ def get_targets():
         })
 
 if __name__ == "__main__":
-    # Host='0.0.0.0' makes it accessible to other devices on your Wi-Fi (like your iPhone)
-    app.run(host='100.103.210.110', port=8080, debug=True)
+    debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+    if debug_mode:
+        logger.warning("WARNING: Flask debug mode is ENABLED via FLASK_DEBUG=1. Do NOT use in production!")
+    bind_host = os.getenv("BIND_HOST", "127.0.0.1")
+    app.run(host=bind_host, port=8080, debug=debug_mode)

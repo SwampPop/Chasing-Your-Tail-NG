@@ -12,9 +12,10 @@ import logging
 import os
 
 # Configuration
-LISTEN_IP = "0.0.0.0" # Listen on all interfaces
+LISTEN_IP = os.getenv("BIND_HOST", "127.0.0.1")
 LISTEN_PORT = 5555
 DB_PATH = "spiderweb.kismet" # Dedicated DB for remote sensors
+ALLOWED_IPS = set(ip.strip() for ip in os.getenv("SPIDER_ALLOWED_IPS", "127.0.0.1").split(",") if ip.strip())
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -75,10 +76,16 @@ def main():
     conn = init_db()
     cursor = conn.cursor()
     
+    logger.info(f"Allowed source IPs: {ALLOWED_IPS}")
+
     try:
         while True:
             # Wait for data from any Spider Sensor
             data, addr = sock.recvfrom(4096)
+            source_ip = addr[0]
+            if source_ip not in ALLOWED_IPS:
+                logger.warning(f"Dropped packet from unauthorized source: {source_ip}")
+                continue
             try:
                 payload = json.loads(data.decode('utf-8'))
                 

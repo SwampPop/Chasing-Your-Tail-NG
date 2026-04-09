@@ -7,6 +7,8 @@ venv/
 
 # Python cache
 __pycache__/
+*.pyc
+*.pyo
 
 # Log files
 *.log
@@ -14,6 +16,7 @@ logs/
 
 # Temporary databases
 dummy_kismet.db
+cyt_history.db
 # Test artifacts
 tests/__pycache__/
 secure_credentials/
