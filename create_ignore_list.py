@@ -24,7 +24,7 @@ def find_latest_kismet_db(path_pattern: str) -> str:
             raise FileNotFoundError(
                 "No Kismet files found matching pattern: "
                 f"{path_pattern}")
-        latest_file = max(list_of_files, key=os.path.getctime)
+        latest_file = max(list_of_files, key=os.path.getmtime)
         logging.info(f"Found latest Kismet DB: {latest_file}")
         return latest_file
     except Exception as e:
@@ -78,14 +78,14 @@ def fetch_all_probed_ssids(db_path: str) -> Set[str]:
     return ssids
 
 
-def merge_with_existing_file(new_data: Set[str], output_path: pathlib.Path) -> list:
+def merge_with_existing_file(new_data: Set[str], output_path: pathlib.Path) -> tuple:
     """
     Merges new data with existing file, preserving comments and structure.
-    Returns list of lines to write (preserves comments from old file).
+    Returns (list of lines to write, count of new entries added).
     """
     if not output_path.exists():
         # No existing file, return simple list
-        return [f"{item}\n" for item in sorted(list(new_data))]
+        return [f"{item}\n" for item in sorted(list(new_data))], len(new_data)
 
     # Read existing file with comments
     existing_lines = []
@@ -102,7 +102,7 @@ def merge_with_existing_file(new_data: Set[str], output_path: pathlib.Path) -> l
                 existing_entries.add(entry)
 
     # Find new entries not in existing file
-    new_entries = new_data - existing_entries
+    new_entries = sorted(new_data - existing_entries)
 
     if new_entries:
         # Add section header for new entries
@@ -112,10 +112,10 @@ def merge_with_existing_file(new_data: Set[str], output_path: pathlib.Path) -> l
         existing_lines.append("# Review these entries and move them to appropriate sections above\n")
         existing_lines.append("\n")
 
-        for entry in sorted(list(new_entries)):
+        for entry in new_entries:
             existing_lines.append(f"{entry}\n")
 
-    return existing_lines
+    return existing_lines, len(new_entries)
 
 
 def write_list_to_file(data: Set[str], output_path: pathlib.Path):
@@ -132,13 +132,12 @@ def write_list_to_file(data: Set[str], output_path: pathlib.Path):
             logging.info(f"Backup created: {backup_path}")
 
             # Merge with existing file
-            merged_lines = merge_with_existing_file(data, output_path)
+            merged_lines, new_count = merge_with_existing_file(data, output_path)
 
             # Write merged content
             with open(output_path, "w", encoding='utf-8') as f:
                 f.writelines(merged_lines)
 
-            new_count = len(data) - len([l for l in merged_lines if l.strip() and not l.strip().startswith('#')] or [])
             if new_count > 0:
                 logging.info(f"Added {new_count} new entries to {output_path}")
                 logging.info(f"Your existing comments and organization were preserved!")

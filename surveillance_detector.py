@@ -107,7 +107,7 @@ class SurveillanceDetector:
         timestamps = [a.timestamp for a in appearances]
         time_span_hours = (max(timestamps) - min(timestamps)) / 3600
 
-        if time_span_hours < self.thresholds['min_time_span_hours']:
+        if time_span_hours < self.thresholds['min_time_span_hours'] or time_span_hours == 0:
             return 0.0, reasons
 
         appearance_rate = len(appearances) / time_span_hours

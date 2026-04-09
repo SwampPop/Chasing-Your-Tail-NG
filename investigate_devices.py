@@ -27,7 +27,7 @@ def find_latest_kismet_db():
 
             files = glob.glob(db_path)
             if files:
-                return max(files, key=os.path.getctime)
+                return max(files, key=os.path.getmtime)
     except (OSError, ValueError) as e:
         print(f"Warning: Error finding database: {e}")
 
