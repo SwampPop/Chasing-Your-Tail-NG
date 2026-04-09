@@ -14,6 +14,21 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+get_vm_kismet_logs_dir() {
+    python3 - <<'PY' "$SCRIPT_DIR/config.json"
+import json
+import sys
+
+with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+    config = json.load(handle)
+
+paths = config.get("paths", {})
+print(paths.get("kismet_logs_vm") or "/home/parallels/CYT/logs/kismet")
+PY
+}
+
 # ============================================
 # STEP 1: Re-enable macOS sleep
 # ============================================
@@ -45,7 +60,8 @@ DEVICE_COUNT=$(echo "$STATS" | grep -o '[0-9]*' | head -1)
 echo "   Total devices captured: ${GREEN}${DEVICE_COUNT:-unknown}${NC}"
 
 # Find the latest kismet database
-LATEST_DB=$(prlctl exec CYT-Kali "ls -t /root/*.kismet ~/.kismet/*.kismet /home/parallels/*.kismet /home/parallels/CYT/*.kismet 2>/dev/null | head -1")
+VM_KISMET_LOGS="$(get_vm_kismet_logs_dir)"
+LATEST_DB=$(prlctl exec CYT-Kali "ls -t \"$VM_KISMET_LOGS\"/*.kismet 2>/dev/null | head -1")
 if [ -n "$LATEST_DB" ]; then
     echo "   Latest capture file: $LATEST_DB"
 fi

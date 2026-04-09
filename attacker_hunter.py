@@ -25,10 +25,12 @@ from typing import Dict, List, Optional, Set
 import signal
 
 # Configuration
+# NOTE: Kismet API credentials should be moved to secure_credentials.py
+# for production use. These defaults are for local-only development.
 CONFIG = {
-    "kismet_api": "http://localhost:2501",
-    "kismet_user": "kismet",
-    "kismet_pass": "REDACTED_PASS",
+    "kismet_api": os.environ.get("KISMET_API_URL", "http://localhost:2501"),
+    "kismet_user": os.environ.get("KISMET_API_USER", "kismet"),
+    "kismet_pass": os.environ.get("KISMET_API_PASS", ""),
     "poll_interval": 5,  # seconds between checks
     "brief_appearance_threshold": 300,  # 5 minutes - devices seen less than this are suspicious
     "strong_signal_threshold": -50,  # dBm - unusually strong signals

@@ -89,6 +89,15 @@ def validate_mac(mac: str) -> bool:
     return bool(MAC_PATTERN.match(mac))
 
 
+def _sql_safe_value(value: str) -> str:
+    """Escape a string for safe use in shell-executed sqlite3 queries.
+
+    Defense-in-depth: even validated MACs go through this to prevent
+    injection if validation is ever bypassed or loosened.
+    """
+    return value.replace("'", "''")
+
+
 def require_api_key(f):
     """Decorator to require API key authentication for endpoints."""
     @functools.wraps(f)
@@ -863,11 +872,12 @@ def get_watchlist_sightings():
     lookback_seconds = 3600  # Last hour
 
     for mac, info in watchlist.items():
+        safe_mac = _sql_safe_value(mac)
         query = f"""
         sqlite3 'file:{kismet_db}?mode=ro' "
         SELECT devmac, strongest_signal, first_time, last_time
         FROM devices
-        WHERE UPPER(devmac) = '{mac}'
+        WHERE UPPER(devmac) = '{safe_mac}'
           AND last_time >= {int(current_time - lookback_seconds)}
         " 2>/dev/null
         """
@@ -937,12 +947,13 @@ def identify_device(mac):
     kismet_db = get_latest_kismet_db()
     device_info = None
     if kismet_db:
+        safe_mac = _sql_safe_value(mac_upper)
         query = f"""
         sqlite3 '{kismet_db}' "
         SELECT devmac, first_time, last_time, strongest_signal, type,
                substr(device, instr(device, 'last_bssid')+14, 17) as connected_to
         FROM devices
-        WHERE devmac = '{mac_upper}'
+        WHERE devmac = '{safe_mac}'
         " 2>/dev/null
         """
         output = vm_exec(query.strip())
@@ -958,13 +969,14 @@ def identify_device(mac):
                 }
 
     # Get appearance history
+    safe_mac_hist = _sql_safe_value(mac_upper)
     history_query = f"""
     sqlite3 {VM_HISTORY_DB_PATH} "
     SELECT COUNT(*) as appearances,
            MIN(timestamp) as first_seen,
            MAX(timestamp) as last_seen
     FROM appearances
-    WHERE mac = '{mac_upper}'
+    WHERE mac = '{safe_mac_hist}'
     " 2>/dev/null
     """
     history_output = vm_exec(history_query.strip())
