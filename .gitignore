@@ -38,6 +38,13 @@ CLAUDE.md
 GEMINI.md
 PROJECT_CONTEXT.md
 todo.md
+CYT_STABILIZATION_PROMPT.md
+
+# Claude Code local state
+.claude/
+
+# Watchdog runtime artifacts
+watchdog_live.db
 
 # Documentation files (local only)
 DEPLOYMENT_CHECKLIST.md
