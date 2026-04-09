@@ -1,120 +1,143 @@
-# Handoff Document - CYT Live Capture Routing
+# Handoff Document — CYT-NG Stabilization & OPSEC Hardening
 
-**Created**: 2026-01-25 13:10
-**Last Updated**: 2026-03-18 20:22
-**Session Duration**: Evening session
+**Created**: 2026-04-08 23:00
+**Last Updated**: 2026-04-09 08:00
+**Session Duration**: Extended session (~9 hours)
 
 ## Goal
 
-Get CYT fully operational with live Kismet capture feeding from the Kali VM through the Parallels shared folder to the macOS GUI — so the "TELEMETRY STALE" banner clears on a real wardrive.
-
----
+Stabilize CYT-NG for field deployment, get it running live on Kali VM, and harden OPSEC by purging all PII from the public GitHub repo.
 
 ## Progress Summary
 
-- Reviewed and committed CODEX's four-file patch set (`f14e338`)
-- Pushed all pending commits to origin/main — repo fully synced
-- Confirmed Mac-side `.kismet` directory exists with 7 historical files
-- Verified `getmtime` fix correctly selects `Kismet-20251213-06-40-32-1.kismet` as newest
-- Operational end-to-end test staged and ready — pending VM execution
+### Phase 1: Stabilization (6 phases completed)
+- Git triage of ~30 modified/untracked files — committed 22, deferred WATCHDOG prototypes
+- Fixed 5 bare `except:` clauses across api_server.py, investigate_devices.py, wigle_export_filter.py, my_wigle_export.py
+- Replaced `os.system()` shell injection in alert_manager.py TTS with `subprocess.Popen()`
+- Added `_sql_safe_value()` defense-in-depth for 3 SQL injection points in cyt_proxy_server.py
+- Moved hardcoded Kismet API credentials to environment variables in attacker_hunter.py
+- Fixed division-by-zero crash in surveillance_detector.py persistence scoring
+- Fixed ignore list new_count calculation bug in create_ignore_list.py
+- Fixed `getctime` -> `getmtime` in create_ignore_list.py and investigate_devices.py
+- Added `get_kismet_logs_path()` for cross-platform DB path resolution (macOS vs Kali)
+- Added 34 new tests (30 -> 64 total), all passing
+- Created `preflight.sh` pre-flight checklist script
+- All work committed with conventional commit messages
 
----
+### Phase 2: Kali VM Deployment
+- Cloned repo to `~/CYT` on Kali
+- Debugged Kismet capture issues:
+  - Interface is `wlan0` (RTL8814AU), NOT `wlan0mon`
+  - Stale Kismet processes holding port 3501 caused silent capture failures
+  - Parallels shared folder incompatible with SQLite WAL mode — Kismet must write locally
+  - Set `kismet_logs_vm` to `/home/parallels/CYT/logs`
+- TUI running live with 227+ devices captured
+- `diag.py` diagnostic script created for DB connectivity debugging
+
+### Phase 3: PII Audit & Remediation
+- Full security audit found 5 CRITICAL, 6 HIGH, 5 MEDIUM, 3 LOW findings
+- Remediated ALL findings:
+  - Real name, iCloud email, macOS username purged from all files and git history
+  - WiGLE API token revoked and purged from history
+  - CYT API key moved to environment variable
+  - GPS coordinates replaced with generic NYC/Chicago across all files and history
+  - Personal SSIDs (3) redacted from all files and history
+  - Neighbor family name and MACs purged from history
+  - Kismet password removed from shell scripts
+  - Operational data files (device_aliases.json, signal_log.csv, threat_map, ignore lists, wigle tools) removed from tracking
+  - `.gitignore` updated to prevent re-tracking
+- Git history rewritten with `git filter-repo` (4 passes)
+- Force-pushed clean history (159 commits, 0 PII matches)
+- Git email set to `SwampPop@users.noreply.github.com`
+
+### Phase 4: AI Toolchain Research
+- Deployed 6 research agents covering 78+ AI tools
+- Produced 8 reference documents (~25,000 words) at `~/my_projects/2_reference_docs/docs/ai_toolchain/`
+- Round-table debrief with project-specific recommendations
+- AAR with action items mapped to active projects
+- User started Perplexity AI Pro trial
 
 ## Current State
 
-**Codebase**: Clean. All tests passing (30 Python, shell syntax clean). Two commits ahead from this work cycle.
+**Codebase**: Clean. 64 tests passing. Zero PII in files or git history.
 
-**Live capture routing** (new — not yet tested end-to-end):
-```
-VM Kismet writes to:  /media/psf/Home/Library/Mobile Documents/.../Documents_Local_Clean/IT/Chasing-Your-Tail-NG
-Mac CYT reads from:   /Users/REDACTED/Library/Mobile Documents/.../Documents_Local_Clean/IT/Chasing-Your-Tail-NG
-```
-Both resolve to the same physical directory via Parallels shared folder. The `.kismet` files in that directory are Sep–Dec 2025 historical captures. Next live wardrive will write a fresh file there.
+**Kali VM**: CYT cloned at `~/CYT`, Kismet capturing to `/home/parallels/CYT/logs`, TUI operational. Config updated locally for VM paths (not committed — machine-specific).
 
-**Python environment**: `.venv` (Python 3.12) — use this, not system Python 3.14.
+**GitHub**: Force-pushed clean history. All forks/clones need re-clone.
 
----
+**Branches**: `main` only. `stabilization` branch was merged and can be deleted.
 
 ## What Worked
 
-- `getmtime` fix — correct key for newest capture; `getctime` was wrong on macOS (metadata change time, not data write time)
-- Config-driven log path — `kismet_logs_vm` in config.json; scripts read it via inline Python at runtime
-- `--log-prefix` flag — correct Kismet CLI flag for controlling output directory; replaces fragile `cd` workaround
+- **Preflight script** — caught every deployment issue (wrong DB path, missing deps, empty DB)
+- **diag.py** — pinpointed the empty DB / Kismet capture failure quickly
+- **`get_kismet_logs_path()`** — clean solution for macOS vs Linux path resolution
+- **`git filter-repo`** with `--replace-text` and `--replace-message` — thorough PII purge across all history
+- **Staged remediation** — fix current files first, then rewrite history, then force-push
 
-## What Didn't Work / Residuals
+## What Didn't Work
 
-- Operational test not yet run — VM must be running to verify the full chain
-- `wardrive.sh:184` — stop summary still echoes hardcoded `/home/parallels/CYT/my_wigle_export.py` (cosmetic only)
-- Other VM helpers (attacker_hunter.py etc.) may still reference old `/home/parallels/CYT/logs/kismet` path
-
----
+- **`git checkout-index -a -f`** during Phase 0 wiped working tree changes (recovered via remote)
+- **Parallels shared folder** for Kismet DB writes — SQLite WAL mode incompatible, silent empty DBs
+- **`wlan0mon`** interface name — actual monitor mode interface is `wlan0` on this hardware
+- **First 3 filter-repo passes** missed PII in commit messages and variant coordinate formats — needed 4 total passes
 
 ## Next Steps
 
-1. **Run operational end-to-end test** (requires VM):
-
-   In VM terminal:
-   ```bash
-   # Confirm shared folder accessible
-   ls -la "/media/psf/Home/Library/Mobile Documents/com~apple~CloudDocs/Documents_Local_Clean/IT/Chasing-Your-Tail-NG/" | grep kismet
-
-   # Start Kismet via patched script
-   cd /home/parallels/Chasing-Your-Tail-NG
-   sudo ./start_kismet_clean.sh wlan0
-   # Should print: Using log prefix: /media/psf/Home/Library/...
-
-   # Confirm new .kismet file being written
-   ls -lt "/media/psf/Home/Library/Mobile Documents/com~apple~CloudDocs/Documents_Local_Clean/IT/Chasing-Your-Tail-NG/"*.kismet | head -3
-   ```
-
-   On Mac:
-   ```bash
-   # Confirm same file visible
-   stat -f "%Sm %N" -t "%Y-%m-%d %H:%M:%S" "$KISMET_LOGS_PATH/Kismet"*.kismet | sort | tail -3
-
-   # Launch CYT
-   cd "$CYT_PROJECT_DIR"
-   source .venv/bin/activate
-   python cyt_gui.py
-   ```
-
-   **Success indicator**: TELEMETRY STALE banner clears; live feed shows active devices.
-
-2. **If test passes**: snapshot the VM (`prlctl snapshot CYT-Kali --name "Shared-Folder-Live-Capture-Working"`)
-
-3. **Clean up**: fix `wardrive.sh:184` hardcoded wigle path
-
----
+1. **Phase 1A: Directory restructuring** — the capture/analysis/reporting/core/ui split is documented in the plan but not executed. This is the key architectural change for cross-platform development.
+2. **TUI improvements** — user expressed interest in modifying the terminal interface
+3. **MCP server for Kismet DB** — highest-leverage tool integration (from AAR)
+4. **Perplexity integration** into research workflow
+5. **NotebookLM** for Paramedic_Doctrine content processing
+6. **WATCHDOG modules** — camera_detector, ble_tracker, alpr_context, watchdog_reporter are untracked prototypes ready for integration when the time comes
 
 ## Blockers
 
-None — code is committed and correct. Operational test is the only remaining gate.
+- None currently. All systems operational.
 
----
+## Key Files Modified
 
-## Key Files
+### Stabilization
+- `alert_manager.py` — os.system -> subprocess.Popen for TTS
+- `api_server.py` — bare except -> specific exceptions
+- `cyt_proxy_server.py` — SQL safe value wrapper
+- `attacker_hunter.py` — env var for Kismet creds
+- `surveillance_detector.py` — division by zero guard
+- `create_ignore_list.py` — count bug fix, getmtime fix
+- `lib/gui_logic.py` — get_kismet_logs_path() added
+- `cyt_tui.py`, `chasing_your_tail.py` — cross-platform path resolution
+- `preflight.sh` — NEW, pre-flight checklist
+- `diag.py` — NEW, DB diagnostic
+- `tests/test_surveillance_detector.py` — NEW, 9 tests
+- `tests/test_gps_tracker.py` — NEW, 14 tests
+- `tests/test_ignore_loader.py` — NEW, 11 tests
 
-| File | Changes |
-|------|---------|
-| `config.json` | Added `kismet_logs_vm` key |
-| `start_kismet_clean.sh` | `get_log_prefix()` + `--log-prefix` flag |
-| `wardrive.sh` | `get_vm_kismet_logs_dir()`, all hardcoded paths replaced |
-| `start_wardrive.sh` | Same pattern as wardrive.sh |
-| `lib/gui_logic.py:35` | `getctime` → `getmtime` |
-| `chasing_your_tail.py:120` | `getctime` → `getmtime` |
-| `.venv/` | Python 3.12 venv, all deps including Kivy SDL2 |
+### PII Remediation
+- `config.json` — paths genericized
+- `HANDOFF.md` — paths replaced with variables
+- `watchdog_reporter.py` — real name removed, GPS defaults zeroed
+- `generate_test_data.py` — real coords -> NYC
+- `cyt_api_cors.py`, `dashboard.html`, `dashboard_local.html` — API key -> env var
+- `start_wardrive.sh`, `stop_wardrive.sh` — Kismet password -> env var
+- `.gitignore` — comprehensive operational data exclusions
 
----
+### Research (in ~/my_projects/2_reference_docs/docs/ai_toolchain/)
+- `00_AI_TOOLCHAIN_OVERVIEW.md` through `08_after_action_report.md`
 
-## Git Status
+## Commands to Resume
 
-**Latest commits**:
-- `f14e338` — fix: route Kismet log output through Parallels shared folder
-- `18efccb` — fix: stabilize CYT UI and Kismet DB selection
+```bash
+# On macOS — run tests
+cd ~/my_projects/0_active_projects/Chasing-Your-Tail-NG
+python3 -m pytest tests/ -v
 
-**Remote**: https://github.com/SwampPop/Chasing-Your-Tail-NG.git — fully synced
+# On Kali — start monitoring
+cd ~/CYT
+sudo killall -9 kismet 2>/dev/null
+sudo kismet -c wlan0 --daemonize --log-prefix /home/parallels/CYT/logs
+./preflight.sh
+python3 cyt_tui.py
 
----
-
-**Session Status**: Paused — awaiting operational VM-side test
-**Confidence**: High — code is correct; test is execution-only
+# On Kali — diagnostic
+python3 diag.py
+```
