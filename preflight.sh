@@ -80,8 +80,11 @@ else:
 " 2>/dev/null || echo "")
 
 if [ -n "$DB_PATH" ]; then
-    # shellcheck disable=SC2086
-    DB_FILES=$(ls -t $DB_PATH/*.kismet 2>/dev/null | head -1)
+    DB_FILES=$(find "$DB_PATH" -maxdepth 1 -name "*.kismet" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    # macOS fallback (find -printf not available)
+    if [ -z "$DB_FILES" ]; then
+        DB_FILES=$(find "$DB_PATH" -maxdepth 1 -name "*.kismet" -type f 2>/dev/null | xargs ls -t 2>/dev/null | head -1)
+    fi
     if [ -n "$DB_FILES" ]; then
         DB_AGE=$(python3 -c "
 import os, time
