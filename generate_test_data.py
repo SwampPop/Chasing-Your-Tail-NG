@@ -89,11 +89,11 @@ def main():
     # We inject this device multiple times at different timestamps/locations
     print(f"-> Injecting Stalker ({STALKER_MAC}) following you...")
     # 10 mins ago
-    insert_device(c, STALKER_MAC, "Wi-Fi Client", "Google", "Home_WiFi", 29.9520, -90.0720, 600)
+    insert_device(c, STALKER_MAC, "Wi-Fi Client", "Google", "Home_WiFi", 40.7138, -74.0070, 600)
     # 5 mins ago
-    insert_device(c, STALKER_MAC, "Wi-Fi Client", "Google", "Home_WiFi", 29.9530, -90.0730, 300)
+    insert_device(c, STALKER_MAC, "Wi-Fi Client", "Google", "Home_WiFi", 40.7148, -74.0080, 300)
     # Now
-    insert_device(c, STALKER_MAC, "Wi-Fi Client", "Google", "Home_WiFi", 29.9540, -90.0740, 0)
+    insert_device(c, STALKER_MAC, "Wi-Fi Client", "Google", "Home_WiFi", 40.7158, -74.0090, 0)
 
     # 3. Inject Noise
     print(f"-> Injecting {NUM_NOISE_DEVICES} random devices...")

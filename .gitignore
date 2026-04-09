@@ -46,6 +46,17 @@ CYT_STABILIZATION_PROMPT.md
 # Watchdog runtime artifacts
 watchdog_live.db
 
+# Operational data (PII - never commit)
+device_aliases.json
+signal_log.csv
+signal_log*.csv
+threat_map*.html
+ignore_list.py
+ignore_list_ssid.py
+ignore_lists/mac_list.json
+my_wigle_export.py
+wigle_lookup.py
+
 # Documentation files (local only)
 DEPLOYMENT_CHECKLIST.md
 HARDWARE_REQUIREMENTS.md

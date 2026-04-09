@@ -70,10 +70,10 @@ Both resolve to the same physical directory via Parallels shared folder. The `.k
    On Mac:
    ```bash
    # Confirm same file visible
-   stat -f "%Sm %N" -t "%Y-%m-%d %H:%M:%S" "/Users/REDACTED/Library/Mobile Documents/com~apple~CloudDocs/Documents_Local_Clean/IT/Chasing-Your-Tail-NG/Kismet"*.kismet | sort | tail -3
+   stat -f "%Sm %N" -t "%Y-%m-%d %H:%M:%S" "$KISMET_LOGS_PATH/Kismet"*.kismet | sort | tail -3
 
    # Launch CYT
-   cd "/Users/REDACTED/Library/Mobile Documents/com~apple~CloudDocs/my_projects/0_active_projects/Chasing-Your-Tail-NG"
+   cd "$CYT_PROJECT_DIR"
    source .venv/bin/activate
    python cyt_gui.py
    ```

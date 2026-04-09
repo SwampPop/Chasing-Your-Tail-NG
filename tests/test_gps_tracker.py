@@ -52,19 +52,19 @@ class TestGPSTracker(unittest.TestCase):
         self.assertAlmostEqual(dist, 0.0, places=5)
 
     def test_known_distance_calculation(self):
-        """New Orleans to Baton Rouge is ~130km."""
+        """NYC to Chicago is ~1145km."""
         tracker = GPSTracker(_make_config())
-        nola = GPSLocation(latitude=40.7128, longitude=-74.0060)
-        br = GPSLocation(latitude=30.4515, longitude=-91.1871)
-        dist = tracker._calculate_distance(nola, br)
-        self.assertAlmostEqual(dist, 130_000, delta=15_000)
+        nyc = GPSLocation(latitude=40.7128, longitude=-74.0060)
+        chi = GPSLocation(latitude=41.8781, longitude=-87.6298)
+        dist = tracker._calculate_distance(nyc, chi)
+        self.assertAlmostEqual(dist, 1_145_000, delta=50_000)
 
     def test_nearby_readings_cluster_together(self):
         tracker = GPSTracker(
             _make_config(location_threshold_meters=200))
         id1 = tracker.add_gps_reading(40.7128, -74.0060)
         # ~50m away — should cluster
-        id2 = tracker.add_gps_reading(29.9515, -74.0060)
+        id2 = tracker.add_gps_reading(40.7132, -74.0060)
         self.assertEqual(id1, id2)
 
     def test_distant_readings_create_separate_sessions(self):
@@ -72,7 +72,7 @@ class TestGPSTracker(unittest.TestCase):
             _make_config(location_threshold_meters=100))
         id1 = tracker.add_gps_reading(40.7128, -74.0060)
         # ~1km away — should NOT cluster
-        id2 = tracker.add_gps_reading(29.9600, -74.0060)
+        id2 = tracker.add_gps_reading(40.7228, -74.0060)
         self.assertNotEqual(id1, id2)
 
     def test_devices_across_locations_empty(self):
@@ -94,7 +94,7 @@ class TestGPSTracker(unittest.TestCase):
         tracker.add_gps_reading(40.7128, -74.0060)
         tracker.add_device_at_current_location("AA:BB:CC:DD:EE:FF")
         # Move to distant location
-        tracker.add_gps_reading(30.4515, -91.1871)
+        tracker.add_gps_reading(41.8781, -87.6298)
         tracker.add_device_at_current_location("AA:BB:CC:DD:EE:FF")
         result = tracker.get_devices_across_locations()
         self.assertIn("AA:BB:CC:DD:EE:FF", result)

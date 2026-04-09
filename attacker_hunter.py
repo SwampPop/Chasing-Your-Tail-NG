@@ -6,7 +6,7 @@ Monitors for suspicious devices that match attacker patterns:
 - Brief appearances (show up, then disappear)
 - Deauth/disassociation frame sources
 - High probe frequency with no association
-- Devices targeting specific networks (REDACTED_SSID, REDACTED_SSID)
+- Devices targeting specific networks (configured in target_networks)
 
 Runs in both wardrive and stationary modes.
 """
@@ -40,7 +40,7 @@ CONFIG = {
     "data_file": "attacker_detections.json",
 
     # Target networks to monitor for attacks against
-    "target_networks": ["REDACTED_SSID", "REDACTED_SSID", "REDACTED_SSID"],
+    "target_networks": [],  # Add your network SSIDs here
 
     # Known attacker patterns (from previous investigation)
     "known_attacker_ouis": [

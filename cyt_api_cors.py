@@ -18,7 +18,7 @@ CORS(app)  # Enable CORS for all routes
 # Configuration - auto-detect paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 KISMET_LOGS_DIR = os.path.join(SCRIPT_DIR, 'logs', 'kismet')
-API_KEY = 'REDACTED_API_KEY'
+API_KEY = os.environ.get('CYT_API_KEY', '')
 
 def get_latest_db():
     pattern = os.path.join(KISMET_LOGS_DIR, '*.kismet')

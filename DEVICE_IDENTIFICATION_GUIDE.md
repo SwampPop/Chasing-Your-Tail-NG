@@ -235,7 +235,7 @@ Query WiGLE database to see if a device has been seen elsewhere:
 prlctl exec CYT-Kali "nano /home/parallels/CYT/ignore_lists/mac_list.txt"
 
 # Or via shared folder from macOS
-nano /Users/REDACTED/my_projects/0_active_projects/Chasing-Your-Tail-NG/ignore_lists/mac_list.txt
+nano ./ignore_lists/mac_list.txt
 
 # Format: One MAC per line with optional comment
 # Example:
