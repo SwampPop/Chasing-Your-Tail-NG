@@ -146,7 +146,7 @@ fi
 # Check Kismet GPS (connecting to macOS gpsd)
 echo -n "   Kismet GPS: "
 sleep 2
-KISMET_GPS=$(prlctl exec CYT-Kali "curl -s --user kismet:REDACTED_PASS 'http://localhost:2501/gps/location.json'" 2>/dev/null)
+KISMET_GPS=$(prlctl exec CYT-Kali "curl -s --user kismet:${KISMET_PASS:-changeme} 'http://localhost:2501/gps/location.json'" 2>/dev/null)
 KISMET_FIX=$(echo "$KISMET_GPS" | grep -o '"kismet.common.location.fix":[0-9]*' | grep -o '[0-9]*' || echo "0")
 KISMET_LAT=$(echo "$KISMET_GPS" | grep -o '"kismet.common.location.geopoint":\[[0-9.-]*,[0-9.-]*\]' | grep -o '\[[^]]*\]' || echo "[0,0]")
 
