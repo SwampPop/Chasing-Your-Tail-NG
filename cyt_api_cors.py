@@ -148,7 +148,8 @@ def health():
     })
 
 if __name__ == '__main__':
+    bind_host = os.getenv("BIND_HOST", "127.0.0.1")
     print(f'CYT API Server with CORS')
     print(f'Kismet logs: {KISMET_LOGS_DIR}')
-    print(f'Starting on 0.0.0.0:3000')
-    app.run(host='0.0.0.0', port=3000, debug=False)
+    print(f'Starting on {bind_host}:3000')
+    app.run(host=bind_host, port=3000, debug=False)

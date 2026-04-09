@@ -102,9 +102,8 @@ def require_api_key(f):
     """Decorator to require API key authentication for endpoints."""
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        # Skip auth if no key is configured (development mode)
         if not DASHBOARD_API_KEY:
-            return f(*args, **kwargs)
+            return jsonify({'error': 'Server misconfigured: CYT_DASHBOARD_API_KEY not set'}), 401
 
         # Check header first, then query param
         provided_key = request.headers.get('X-API-Key') or request.args.get('api_key')
@@ -1066,6 +1065,11 @@ def get_identification_tips(
 
 
 if __name__ == '__main__':
+    if not DASHBOARD_API_KEY:
+        raise SystemExit(
+            "FATAL: CYT_DASHBOARD_API_KEY environment variable is not set. "
+            "Refusing to start without authentication configured."
+        )
     print('=' * 60)
     print('CYT Dashboard Server with AO Tracking')
     print('=' * 60)
@@ -1078,15 +1082,12 @@ if __name__ == '__main__':
     print(f'VM API:       {VM_API_URL}')
     print('-' * 60)
     print('SECURITY CONFIGURATION:')
-    if DASHBOARD_API_KEY:
-        print(f'  Dashboard API Key: ENABLED (set via CYT_DASHBOARD_API_KEY)')
-    else:
-        print(f'  Dashboard API Key: DISABLED (development mode)')
-        print(f'  Set CYT_DASHBOARD_API_KEY env var to enable authentication')
+    print(f'  Dashboard API Key: ENABLED (set via CYT_DASHBOARD_API_KEY)')
     if VM_API_KEY:
         print(f'  VM API Key: ENABLED (set via CYT_VM_API_KEY)')
     else:
         print(f'  VM API Key: NOT SET')
     print(f'  CORS: Restricted to localhost:8080')
     print('=' * 60)
-    app.run(host='0.0.0.0', port=8080, debug=False)
+    bind_host = os.getenv("BIND_HOST", "127.0.0.1")
+    app.run(host=bind_host, port=8080, debug=False)

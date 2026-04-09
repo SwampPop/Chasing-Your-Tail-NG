@@ -55,7 +55,7 @@ echo ""
 echo -e "${BLUE}▶ Step 2: Wardrive Statistics...${NC}"
 
 # Get stats from Kismet
-STATS=$(prlctl exec CYT-Kali "curl -s --user kismet:${KISMET_PASS:-changeme} 'http://localhost:2501/devices/views/all/count.json'" 2>/dev/null)
+STATS=$(prlctl exec CYT-Kali "curl -s --user kismet:${KISMET_PASS:?KISMET_PASS env var must be set} 'http://localhost:2501/devices/views/all/count.json'" 2>/dev/null)
 DEVICE_COUNT=$(echo "$STATS" | grep -o '[0-9]*' | head -1)
 echo "   Total devices captured: ${GREEN}${DEVICE_COUNT:-unknown}${NC}"
 
