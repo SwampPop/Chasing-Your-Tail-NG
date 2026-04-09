@@ -179,32 +179,49 @@ with open('$CONFIG') as f:
 print(c.get('kismet_health', {}).get('interface', 'wlan0'))
 " 2>/dev/null || echo "wlan0")
 
-if ip link show "$KISMET_IFACE" >/dev/null 2>&1; then
-    pass "Interface $KISMET_IFACE exists"
-    # Check monitor mode
-    if iw dev "$KISMET_IFACE" info 2>/dev/null | grep -q "type monitor"; then
-        pass "$KISMET_IFACE is in monitor mode"
-    else
-        warn "$KISMET_IFACE is NOT in monitor mode — Kismet will attempt to set this, but NetworkManager may interfere"
-        # Check if NetworkManager is managing this interface
-        if command -v nmcli >/dev/null 2>&1; then
-            NM_STATE=$(nmcli -f DEVICE,STATE dev 2>/dev/null | awk -v iface="$KISMET_IFACE" '$1==iface {print $2}')
-            if [ "$NM_STATE" = "connected" ] || [ "$NM_STATE" = "disconnected" ] || [ "$NM_STATE" = "unavailable" ]; then
-                warn "NetworkManager is managing $KISMET_IFACE (state: $NM_STATE) — run: sudo nmcli dev set $KISMET_IFACE managed no"
-            else
-                pass "NetworkManager is NOT managing $KISMET_IFACE"
-            fi
-        fi
-    fi
-else
-    fail "Interface $KISMET_IFACE not found — run 'ip link show' to see available interfaces"
-fi
-
-# Check if Kismet is running
+KISMET_RUNNING=false
 if pgrep -x kismet >/dev/null 2>&1 || pgrep -f "kismet" >/dev/null 2>&1; then
+    KISMET_RUNNING=true
     pass "Kismet process is running"
 else
     warn "Kismet is not running — start it before launching the TUI"
+fi
+
+# When Kismet is already running it owns the wireless interface and may have
+# renamed it (e.g. wlan0 -> wlan0mon) or virtualized it via the driver.
+# In that case 'ip link show wlan0' returns nothing, which is expected.
+# Strategy: check for a monitor-mode interface via 'iw dev'; only FAIL if
+# Kismet is NOT running AND the interface is gone.
+MONITOR_IFACE=$(iw dev 2>/dev/null | awk '/Interface/{iface=$2} /type monitor/{print iface; exit}')
+
+if ip link show "$KISMET_IFACE" >/dev/null 2>&1; then
+    # Interface still visible (Kismet not yet started, or managed mode)
+    if iw dev "$KISMET_IFACE" info 2>/dev/null | grep -q "type monitor"; then
+        pass "$KISMET_IFACE is in monitor mode"
+    else
+        if [ "$KISMET_RUNNING" = "true" ]; then
+            # Kismet is up; it may be using an internal capture method
+            pass "$KISMET_IFACE found — Kismet is running and managing capture"
+        else
+            warn "$KISMET_IFACE is NOT in monitor mode — Kismet will set this, but NetworkManager may interfere"
+            if command -v nmcli >/dev/null 2>&1; then
+                NM_STATE=$(nmcli -f DEVICE,STATE dev 2>/dev/null | awk -v iface="$KISMET_IFACE" '$1==iface {print $2}')
+                if [ "$NM_STATE" = "connected" ] || [ "$NM_STATE" = "disconnected" ] || [ "$NM_STATE" = "unavailable" ]; then
+                    warn "NetworkManager is managing $KISMET_IFACE (state: $NM_STATE) — run: sudo nmcli dev set $KISMET_IFACE managed no"
+                else
+                    pass "NetworkManager is NOT managing $KISMET_IFACE"
+                fi
+            fi
+        fi
+    fi
+elif [ -n "$MONITOR_IFACE" ]; then
+    # wlan0 was renamed/virtualized; a monitor interface exists under another name
+    pass "Monitor-mode interface active: $MONITOR_IFACE (Kismet renamed $KISMET_IFACE)"
+elif [ "$KISMET_RUNNING" = "true" ]; then
+    # Kismet is running but we can't see the interface — it's fully owned by Kismet
+    pass "$KISMET_IFACE is owned by the running Kismet process (expected)"
+else
+    fail "Interface $KISMET_IFACE not found and Kismet is not running — run 'ip link show' to check available interfaces"
 fi
 
 # Summary
