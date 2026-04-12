@@ -73,3 +73,25 @@ RASPBERRY_PI_COMPARISON.md
 
 # Beast mode hardware documentation (local only)
 docs/
+
+
+# Secrets — MED-002 (2026-04-12)
+*.env
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.crt
+credentials
+credentials.*
+secrets
+secrets.*
+.aws/credentials
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+id_ecdsa
+id_ecdsa.pub
