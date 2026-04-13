@@ -1,117 +1,136 @@
-# Handoff Document — CYT-NG Stabilization, OPSEC, & Security Audit
+# Handoff Document — CYT-NG + Cross-Project Session
 
 **Created**: 2026-04-08 23:00
-**Last Updated**: 2026-04-09 12:00
-**Session Duration**: Extended (~13 hours across 2 sessions)
+**Last Updated**: 2026-04-13 01:30 CDT
+**Session Duration**: ~1 hour (pentest remediation — osquery + Zeek)
 
 ## Goal
 
-Stabilize CYT-NG for field deployment, harden OPSEC, and achieve GREEN security posture.
+Original: Stabilize CYT-NG for field deployment, harden OPSEC, achieve GREEN security posture.
+This session: Recover from unexpected shutdown, close pentest commit gap, deploy Perplexity terminal/MCP integration, assess mempalace coverage for agent projects.
 
 ## Progress Summary
 
-### Stabilization (Complete)
-- 6-phase stabilization executed (code quality, security, tests, ops)
-- 34 new tests (64 total, all passing)
-- `preflight.sh` and `diag.py` created
-- Cross-platform `get_kismet_logs_path()` for macOS/Kali
+### Prior Sessions (Complete — preserved from last handoff)
+- 6-phase CYT-NG stabilization, 64 tests passing, security GREEN
+- Kali VM deployment, TUI running live with 227+ devices
+- PII remediation complete (git history rewritten, zero PII)
+- 11 CVEs patched across 6 packages
+- ARES-1 security audit: 37 findings resolved, 8/8 verification PASS
+- macOS username rename scripts staged on Desktop
 
-### Kali VM Deployment (Complete)
-- TUI running live with 227+ devices
-- Kismet capturing to `/home/parallels/CYT/logs`
-- Interface is `wlan0`, NetworkManager handoff handled by `start_kismet_clean.sh`
-- Python venv at `~/.venv/cyt/` on Kali
+### This Session (2026-04-13)
+- [x] Added 7 osquery detection queries to `pentest/baselines/phase1-2026-04-09/osquery_security.conf` (R-006/008/010/012/014/016/017)
+- [x] Syntax-validated all 7 via osqueryi 5.21.0; live-fire positive tests passed for base64 + zip
+- [x] Deployed to `/var/osquery/osquery.conf`, osqueryd kickstarted cleanly (PID 32149)
+- [x] Built repo-tracked Zeek config in `pentest/zeek/`: local.zeek, node.cfg, scripts/dns-anomalies.zeek, deploy_zeek.sh, test_capture.sh, README.md
+- [x] R-002 Zeek enhancements: MAC logging + Community ID + custom DNS anomaly detection (Long_Qname > 100, NXDOMAIN_Spike >=20/min)
+- [x] Live-capture verified on en0: 88 packets, conn.log has orig/resp_l2_addr + community_id, 21 dns.log rows
+- [x] Committed Santa lockdown baseline files (leftover from 2026-04-10)
+- [x] AAR updated: 10 open findings → 2 (R-005 pending Wazuh, R-019 manual TCC)
+- [x] All 5 commits pushed to SwampPop/pentest (`994bee7..526ca09`)
 
-### PII Remediation (Complete)
-- Full audit: 19 findings, all resolved
-- Git history rewritten (4 filter-repo passes), zero PII in 159 commits
-- Git email: `SwampPop@users.noreply.github.com`
-- WiGLE API token revoked
-
-### Dependency Patching (Complete)
-- Perplexity vulnerability scan: 11 CVEs across 6 packages
-- All patched: urllib3 2.6.3, cryptography 46.0.7, Pillow 12.1.1, requests 2.33.0, Flask 3.1.3, Pygments 2.20.0
-
-### Security Audit (Complete — GREEN)
-- Full ARES-1 audit: 37 findings (6C, 9H, 10M, 4L, 8I)
-- Perplexity PR #2 fixed 8 findings, merged
-- 2 remaining items fixed (watchdog_dashboard bind, tracked pyc)
-- Verification audit: 8/8 PASS
-- Security posture: **GREEN**
-
-### AI Toolchain Research (Complete)
-- 6 research agents, 25,000+ words across 8 docs at `~/my_projects/2_reference_docs/docs/ai_toolchain/`
-- Round-table debrief + AAR with project recommendations
-- User started Perplexity AI Pro trial
-
-### macOS Username Rename (Staged)
-- Plan approved: `thomaslavoie` -> `snakedoctor`, full name `SD`
-- `~/Desktop/rename_phase1.sh` — run from rescue account
-- `~/Desktop/rename_phase2.sh` — run as snakedoctor after login
-- 129 hardcoded references mapped, all covered by scripts
+### Prior Session (2026-04-10)
+- [x] Diagnosed unexpected shutdown — battery power `sleep 10` caused idle shutdown
+- [x] Fixed: `sudo pmset -b sleep 0` — system no longer auto-sleeps on battery
+- [x] Completed interrupted pentest commit (`503d992`) — 26 files, Phase 1 ATT&CK results
+- [x] Installed `llm` CLI v0.30 + `llm-perplexity` plugin v2026.2.1
+  - Venv: `~/.local/llm-env/`, symlinked to `~/.local/bin/llm`
+  - 4 models: sonar, sonar-pro, sonar-deep-research, sonar-reasoning-pro
+- [x] Installed official Perplexity MCP server v0.9.0 (version-pinned, local install)
+  - Location: `~/.local/mcp-servers/node_modules/@perplexity-ai/mcp-server/`
+  - Registered with Claude Code (needs API key + restart to activate)
+- [x] Deep security research on all Perplexity integration options (5 options evaluated)
+- [x] Mempalace audit: globally available but NOT indexed for ARES-1/HELIOS-1 knowledge bases
+- [x] Memory saved: never push Workstation_Build_2026 or moroz to GitHub
 
 ## Current State
 
-**Codebase**: Clean. 64 tests passing. Zero PII. 11 CVEs patched. Security posture GREEN.
+**CYT-NG codebase**: Unchanged this session. Still clean, 64 tests, security GREEN.
+**Pentest project**: Commit completed (`503d992`). Not pushed to remote yet.
+**Perplexity integration**: Installed but needs API key before first use.
+**MCP server**: Registered but inactive — needs `PERPLEXITY_API_KEY` env var + Claude Code restart.
 
-**Kali VM**: CYT cloned at `~/CYT`, venv at `~/.venv/cyt/`, Kismet logs to `/home/parallels/CYT/logs`.
+## What Worked
+- Battery power investigation via `pmset`, `sysctl kern.shutdownreason`, `kern.bootreason` — clean diagnosis
+- Local npm install with version pinning instead of `npx -y` for MCP server — eliminates supply chain risk
+- Dedicated venv for llm CLI (same pattern as mempalace) — avoids PEP 668 conflicts
 
-**GitHub**: Clean history, all fixes pushed, PR #2 merged.
-
-**Pinned for later**: Telegram bot + WiGLE credential setup for live alerts.
+## What Didn't Work
+- Subagent for mempalace check failed (permission restrictions in Explore agent) — resolved by direct search
+- Subagent for Perplexity research failed (no WebSearch access) — resolved by running research directly
 
 ## Next Steps
 
-1. **macOS username rename** — execute tonight from rescue account
-2. **Phase 1A directory restructuring** — capture/analysis/reporting/core/ui split
-3. **TUI improvements** — user wants to customize
-4. **MCP server for Kismet DB** — highest-leverage tool integration
-5. **Telegram/WiGLE credential setup** — enable live alerts
+### Immediate (this session or next)
+1. **Set Perplexity API key** — add `PERPLEXITY_API_KEY` to `~/.zshrc`, restart Claude Code
+2. **Deploy pentest osquery gap-closing queries** — 7 new detection rules for R-006, R-008, R-010, R-012, R-014, R-016, R-017
+3. **Enhance Zeek local.zeek** — MAC logging, community ID, DNS anomaly detection (R-002)
+4. **Revoke Terminal TCC permissions** (R-019) — System Settings > Privacy > Screen Recording
+
+### Queued
+5. **Mine ARES-1/HELIOS-1 knowledge bases into mempalace** — populate `wing_agent`
+6. **Create Claude project configs for ARES-1/HELIOS-1** under `~/.claude/projects/`
+7. **CYT-NG Phase 1A directory restructuring** — capture/analysis/reporting/core/ui split
+8. **macOS username rename** — execute from rescue account (scripts on Desktop)
+9. **Push pentest commit to remote** — when ready
+
+### Pentest Remediation Tracker (Open Items)
+| ID | Finding | Can Close Offline? |
+|----|---------|-------------------|
+| R-002 | Zeek unconfigured | Yes — enhance local.zeek |
+| R-005 | Shell profile persistence | Already has osquery query |
+| R-006 | launchctl submit bypass | Yes — osquery process query |
+| R-008 | Keychain export undetected | Yes — osquery process query |
+| R-010 | osascript credential phishing | Yes — osquery process query |
+| R-012 | Gatekeeper bypass | Yes — osquery process query |
+| R-014 | Base64 decode-to-execute | Yes — osquery process query |
+| R-016 | Clipboard monitoring | Yes — osquery process query |
+| R-017 | Password-protected zip | Yes — osquery process query |
+| R-019 | TCC revocation | Yes — manual GUI action |
 
 ## Blockers
 
-None.
+- **Perplexity API key** — needed before `llm` or MCP server will function
+- **Not on home network** — no network-dependent pentest testing (Phase 2-4 deferred)
 
 ## Key Files
 
-### This Session
-- `requirements.txt` — 6 packages patched for CVEs
-- `api_server.py` — Flask debug off by default, localhost binding
-- `cyt_proxy_server.py` — auth required at startup, 401 on missing key
-- `spider_core.py` — UDP IP allowlist
-- `watchdog_dashboard.py` — localhost binding
-- `start_wardrive.sh`, `stop_wardrive.sh` — hard-fail on missing KISMET_PASS
-- `.gitignore` — cyt_history.db, watchlist.db, *.pyc added
-- `preflight.sh` — sections 7-8 added (log dir, interface check)
-- `start_kismet_clean.sh` — NetworkManager handoff added
+### This Session (new/modified)
+- `~/.local/llm-env/` — llm CLI venv
+- `~/.local/bin/llm` — symlink to llm binary
+- `~/.local/mcp-servers/node_modules/@perplexity-ai/mcp-server/` — pinned v0.9.0
+- `~/.claude.json` — updated with perplexity MCP server config
+- `pentest/` — commit `503d992` (26 files: AAR, baselines, reference docs)
 
-### Rename Scripts (Desktop)
-- `~/Desktop/rename_phase1.sh` — Phase 1 (from rescue account)
-- `~/Desktop/rename_phase2.sh` — Phases 2-6 (from snakedoctor)
+### CYT-NG Untracked (from prior sessions)
+- `alpr_context.py`, `ble_tracker_detector.py`, `camera_detector.py`
+- `config/`, `drone_signature_matcher.py`, `templates/`, `watchdog_reporter.py`
 
-### Research (reference docs)
-- `~/my_projects/2_reference_docs/docs/ai_toolchain/00-08` — 9 documents
+### Memory
+- `~/.claude/projects/.../memory/feedback_no_push_repos.md` — never push Workstation_Build_2026 or moroz
 
 ## Commands to Resume
 
 ```bash
-# macOS — run tests
+# Set Perplexity API key (do this first)
+echo 'export PERPLEXITY_API_KEY="your-key-here"' >> ~/.zshrc
+source ~/.zshrc
+
+# Test llm CLI
+llm -m sonar "test query"
+
+# Restart Claude Code to activate MCP server
+# Then verify: claude mcp list
+
+# Deploy osquery gap-closing queries (needs sudo)
+sudo nano /var/osquery/osquery.conf  # or let Claude update it
+
+# CYT-NG tests (unchanged)
 cd ~/my_projects/0_active_projects/Chasing-Your-Tail-NG
 python3 -m pytest tests/ -v
 
-# Kali — start monitoring
-cd ~/CYT && git pull origin main
-sudo bash start_kismet_clean.sh wlan0
-sleep 5 && ./preflight.sh
-~/.venv/cyt/bin/python3 cyt_tui.py
-
-# Kali — diagnostic
-python3 diag.py
-
-# macOS — username rename (tonight)
-# 1. Create rescue admin account first
-# 2. Log out, log in as rescue
-bash /Users/thomaslavoie/Desktop/rename_phase1.sh
-# 3. Log out rescue, log in as snakedoctor
-bash ~/Desktop/rename_phase2.sh
+# Pentest — push when ready
+cd ~/my_projects/0_active_projects/pentest
+git push origin main
 ```
