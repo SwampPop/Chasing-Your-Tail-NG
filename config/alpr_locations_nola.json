@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "description": "Known ALPR and surveillance camera locations — Orleans Parish, LA",
+    "sources": ["DeFlock (deflock.org)", "Atlas of Surveillance (atlasofsurveillance.org)", "Manual observation"],
+    "last_updated": "2026-04-05",
+    "note": "Populate this file with observed camera locations during field operations. Coordinates from passive observation of publicly visible infrastructure only."
+  },
+  "locations": [
+    {
+      "id": "NOLA-SAMPLE-001",
+      "type": "alpr",
+      "vendor": "Unknown",
+      "latitude": 29.9511,
+      "longitude": -90.0715,
+      "description": "Sample entry — French Quarter (replace with real observations)",
+      "observed_date": "2026-04-05",
+      "confidence": "low",
+      "notes": "Template entry. Delete and replace with actual observations."
+    }
+  ],
+  "coverage_areas": [
+    {
+      "name": "French Quarter",
+      "bounds": {"north": 29.9650, "south": 29.9500, "east": -90.0580, "west": -90.0780}
+    },
+    {
+      "name": "Central Business District",
+      "bounds": {"north": 29.9580, "south": 29.9420, "east": -90.0580, "west": -90.0800}
+    },
+    {
+      "name": "Garden District",
+      "bounds": {"north": 29.9350, "south": 29.9200, "east": -90.0750, "west": -90.0950}
+    },
+    {
+      "name": "Mid-City",
+      "bounds": {"north": 29.9800, "south": 29.9600, "east": -90.0500, "west": -90.0800}
+    },
+    {
+      "name": "Marigny / Bywater",
+      "bounds": {"north": 29.9700, "south": 29.9550, "east": -90.0300, "west": -90.0550}
+    }
+  ]
+}

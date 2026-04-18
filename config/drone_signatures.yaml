@@ -1,0 +1,81 @@
+# Drone and surveillance device WiFi signatures
+# Used by behavioral_drone_detector.py and vendor_lookup.py
+# Sources: IEEE OUI registry, DJI DroneID research, Benn Jordan's flock-you project
+
+oui_prefixes:
+  # DJI (SZ DJI Technology Co., Ltd.)
+  "60:60:1F": "DJI"
+  "34:D2:62": "DJI"
+  "48:1C:B9": "DJI"
+  # Parrot SA
+  "A0:14:3D": "Parrot"
+  "90:03:B7": "Parrot"
+  # Yuneec
+  "58:D5:6E": "Yuneec"
+  # Autel Robotics (check under Autel/Shenzhen)
+  "8C:F5:A3": "Autel"
+  # Skydio (uses Qualcomm chipsets — harder to identify by OUI alone)
+
+ssid_patterns:
+  drone:
+    - "DJI-Mavic-*"
+    - "DJI-Mini-*"
+    - "DJI-Phantom-*"
+    - "DJI-Air-*"
+    - "DJI-FPV-*"
+    - "DJI-Inspire-*"
+    - "DJI_RC*"
+    - "Parrot-*"
+    - "ANAFI-*"
+    - "Bebop-*"
+    - "Disco-*"
+    - "Autel-*"
+    - "EVO-*"
+    - "Skydio-*"
+    - "S2-*"
+    - "BetaFPV-*"
+    - "ELRS-*"
+    - "Caddx-*"
+
+  # Flock Safety ALPR cameras (from bennjordan/flock-you)
+  flock_alpr:
+    - "*flock*"
+    - "*Flock*"
+    - "*FLOCK*"
+
+  # Surveillance-related device patterns
+  surveillance:
+    - "DIRECT-*"  # WiFi Direct (printers, cameras)
+    - "*cam*"
+    - "*camera*"
+    - "*security*"
+    - "*ring*"
+    - "*nest*"
+    - "*arlo*"
+
+# DJI DroneID vendor-specific Information Element OUI
+dji_droneid_oui: "26:37:12"
+
+# Known drone WiFi characteristics
+drone_wifi_traits:
+  # DJI drones often use non-standard beacon intervals
+  beacon_interval_anomaly: true
+  # DJI controllers and drones hop channels characteristically
+  channel_hopping: true
+  # Drones typically do NOT randomize MACs (unlike modern phones)
+  mac_randomization: false
+
+# Hardware to purchase (future)
+hardware_wishlist:
+  - name: "RTL-SDR v4"
+    price: "$30"
+    purpose: "ISM band IoT device detection (rtl_433) + ADS-B aircraft tracking (dump1090)"
+  - name: "Orbic RC400L"
+    price: "$20"
+    purpose: "EFF Rayhunter IMSI catcher detection"
+  - name: "Ubertooth One"
+    price: "$120"
+    purpose: "BLE tracker detection (AirTags, Tile) via Kismet"
+  - name: "ESP32 Marauder"
+    price: "$15-40"
+    purpose: "Distributed WiFi/BLE sensor nodes"

@@ -1,0 +1,228 @@
+# WATCHDOG Camera Surveillance Device Signature Database
+# Used by camera_detector.py and ESP32 flock_detector firmware
+# Sources: IEEE OUI registry, manufacturer documentation, security research
+#
+# Last updated: 2026-04-05
+
+# === MAC OUI Prefixes by Manufacturer ===
+# Format: "XX:XX:XX": "Manufacturer"
+camera_oui_prefixes:
+  # --- Hikvision (Hangzhou Hikvision Digital Technology) ---
+  "28:57:BE": "Hikvision"
+  "44:19:B6": "Hikvision"
+  "54:C4:15": "Hikvision"
+  "68:E2:09": "Hikvision"
+  "80:A2:35": "Hikvision"
+  "A4:14:37": "Hikvision"
+  "C0:56:E3": "Hikvision"
+  "C4:2F:90": "Hikvision"
+  "D4:6B:A6": "Hikvision"
+  "E0:CA:94": "Hikvision"
+  "4C:BD:8F": "Hikvision"
+  "18:68:CB": "Hikvision"
+  "BC:AD:28": "Hikvision"
+  "C0:51:7E": "Hikvision"
+
+  # --- Dahua Technology ---
+  "3C:EF:8C": "Dahua"
+  "40:2C:76": "Dahua"
+  "A0:BD:1D": "Dahua"
+  "D4:43:A8": "Dahua"
+  "E0:50:8B": "Dahua"
+  "4C:11:BF": "Dahua"
+  "B0:41:1D": "Dahua"
+  "20:A6:0C": "Dahua"
+  "E4:24:6C": "Dahua"
+
+  # --- Axis Communications ---
+  "00:40:8C": "Axis"
+  "AC:CC:8E": "Axis"
+  "B8:A4:4F": "Axis"
+  "D4:81:D7": "Axis"
+  "64:A0:E7": "Axis"
+
+  # --- Amcrest (Dahua OEM — shares some OUIs) ---
+  "9C:8E:CD": "Amcrest"
+
+  # --- Reolink ---
+  "EC:71:DB": "Reolink"
+  "B4:6D:C2": "Reolink"
+  "9C:04:EB": "Reolink"
+
+  # --- Vivotek ---
+  "00:02:D1": "Vivotek"
+  "00:0F:FC": "Vivotek"
+
+  # --- Hanwha Techwin (Samsung) ---
+  "00:09:18": "Hanwha"
+  "00:16:6C": "Hanwha"
+  "00:26:73": "Hanwha"
+  "28:E3:1F": "Hanwha"
+  "F4:42:8F": "Hanwha"
+
+  # --- Pelco (Schneider Electric) ---
+  "00:C0:FF": "Pelco"
+  "00:D0:C9": "Pelco"
+
+  # --- Bosch Security ---
+  "00:07:5F": "Bosch"
+  "00:04:BF": "Bosch"
+  "64:87:D7": "Bosch"
+
+  # --- Sony (network cameras) ---
+  "00:1A:80": "Sony"
+  "00:EB:2D": "Sony"
+
+  # --- Ubiquiti (UniFi Protect cameras) ---
+  "24:5A:4C": "Ubiquiti"
+  "44:D9:E7": "Ubiquiti"
+  "68:D7:9A": "Ubiquiti"
+  "78:8A:20": "Ubiquiti"
+  "80:2A:A8": "Ubiquiti"
+  "F0:9F:C2": "Ubiquiti"
+  "FC:EC:DA": "Ubiquiti"
+
+  # --- Foscam ---
+  "00:62:6E": "Foscam"
+  "C0:A5:DD": "Foscam"
+
+  # --- TP-Link (Tapo cameras) ---
+  "50:C7:BF": "TP-Link"
+  "60:A4:B7": "TP-Link"
+  "B0:4E:26": "TP-Link"
+
+  # --- Wyze ---
+  "2C:AA:8E": "Wyze"
+  "7C:78:B2": "Wyze"
+
+  # --- Ring (Amazon) ---
+  "B0:09:DA": "Ring"
+  "90:48:9A": "Ring"
+
+  # --- Nest/Google ---
+  "18:B4:30": "Nest"
+  "64:16:66": "Nest"
+
+  # --- Eufy (Anker) ---
+  "98:8F:E0": "Eufy"
+
+  # --- Arlo (Netgear) ---
+  "9C:C9:EB": "Arlo"
+  "48:B4:C9": "Arlo"
+
+# === Common chipset OUIs used in white-label cameras ===
+# These indicate IoT/camera when combined with other signals
+chipset_camera_indicators:
+  "48:3F:DA": "Espressif (ESP32 camera)"
+  "24:0A:C4": "Espressif"
+  "30:AE:A4": "Espressif"
+  "7C:DF:A1": "Espressif"
+  "C8:2B:96": "Espressif"
+  "F4:CF:A2": "Espressif"
+  "00:E0:4C": "Realtek (common in IP cameras)"
+  "48:02:2A": "Realtek"
+  "C0:25:A5": "Realtek"
+  "20:F4:1B": "Shenzhen Bilian (Realtek camera module)"
+  "94:E9:79": "Liteon/Realtek camera module"
+
+# === SSID Patterns for Camera Detection ===
+# Cameras broadcast these SSIDs in setup/AP mode
+camera_ssid_patterns:
+  hikvision:
+    - "HIKVISION_*"
+    - "IPCAM-*"
+    - "HIK-*"
+    - "DS-2CD*"
+  dahua:
+    - "DAP-*"
+    - "DAHUA-*"
+    - "IPC-*-*"
+    - "DMSS_*"
+  amcrest:
+    - "Amcrest_*"
+    - "Amcrest-IP*"
+    - "AMCREST_WIFI_*"
+  reolink:
+    - "REOLINK_*"
+    - "IPC_*"
+  axis:
+    - "AXIS-*"
+    - "SetupAxis*"
+  vivotek:
+    - "VIVOTEK_*"
+    - "IPCam_*"
+  wyze:
+    - "WyzeCam_*"
+    - "WYZE_*"
+  ring:
+    - "Ring-*"
+    - "Ring Setup*"
+  nest:
+    - "Nest Cam*"
+  generic:
+    - "IPCAM_*"
+    - "IPCamera_*"
+    - "Camera_*"
+    - "WIFICAM_*"
+    - "ONVIF_*"
+    - "V380_*"
+    - "CamHi_*"
+    - "YCC365_*"
+    - "CloudSEE_*"
+    - "Eye4_*"
+
+# === ALPR / Surveillance Infrastructure ===
+alpr_ssid_patterns:
+  - "*flock*"
+  - "*Flock*"
+  - "fs_*"
+  - "*vigilant*"
+  - "*rekor*"
+  - "*projectnola*"
+  - "*genetec*"
+  - "*penguin*"
+  - "*pigvision*"
+
+# === Detection SSID regex (combined) ===
+# For use in Python: re.compile(pattern, re.IGNORECASE)
+detection_regex: "(?i)(hikvi|dahua|amcrest|reolink|axis|vivotek|ipcam|wificam|camera|onvif|v380|camhi|ycc365|ring.setup|wyzecam|nest.cam|eye4|cloudsee|flock|vigilant|rekor|projectnola|genetec)"
+
+# === Ports for Active Auditing (Phase 2 only) ===
+camera_ports:
+  http: [80, 8080, 8081, 8888]
+  https: [443, 8443]
+  rtsp: [554, 8554]
+  onvif: [80, 8080]  # ONVIF uses HTTP
+  manufacturer_specific:
+    dahua: [37777]
+    hikvision: [8000, 37020]
+    ubiquiti: [7441, 7447]
+    xmeye: [34567]
+  discovery:
+    ws_discovery: [3702]
+    ssdp: [1900]
+    mdns: [5353]
+
+# === RTSP Stream Paths (Phase 2 only) ===
+rtsp_paths:
+  hikvision:
+    - "/Streaming/Channels/101"
+    - "/Streaming/Channels/102"
+    - "/live"
+  dahua:
+    - "/cam/realmonitor?channel=1&subtype=0"
+    - "/cam/realmonitor?channel=1&subtype=1"
+  axis:
+    - "/axis-media/media.amp"
+    - "/mjpg/video.mjpg"
+  generic:
+    - "/live"
+    - "/ch0"
+    - "/stream1"
+    - "/video"
+    - "/live/ch0"
+    - "/live/ch1"
+    - "/live/main"
+    - "/live/sub"
+    - "/media/video1"
+    - "/onvif-media/media.amp"
