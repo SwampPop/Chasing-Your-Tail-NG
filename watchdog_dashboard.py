@@ -212,17 +212,43 @@ def fetch_kismet_devices(kismet_url, username, password, last_seconds=30):
     return []
 
 
+def _parse_kismet_gps_payload(data):
+    """Extract (lat, lon) from a Kismet /gps/location.json response.
+
+    Tolerates both shapes Kismet returns: scalar lat/lon fields, and the
+    GeoJSON-style geopoint = [lon, lat] array (observed as the only field
+    present when gpsd is running but no fix yet, and likely when a real
+    fix is populated too).
+    """
+    if not isinstance(data, dict):
+        return None, None
+    lat = data.get('kismet.common.location.lat')
+    lon = data.get('kismet.common.location.lon')
+    if lat and lon:
+        try:
+            return float(lat), float(lon)
+        except (TypeError, ValueError):
+            pass
+    geopoint = data.get('kismet.common.location.geopoint')
+    if isinstance(geopoint, (list, tuple)) and len(geopoint) >= 2:
+        try:
+            lon_v, lat_v = float(geopoint[0]), float(geopoint[1])
+            if lat_v or lon_v:  # drop the [0,0] no-fix sentinel
+                return lat_v, lon_v
+        except (TypeError, ValueError):
+            pass
+    return None, None
+
+
 def fetch_kismet_gps(kismet_url, username, password):
     """Fetch current GPS position from Kismet. Returns (lat, lon) or (None, None)."""
     try:
         url = f"{kismet_url}/gps/location.json"
         resp = requests.get(url, auth=(username, password), timeout=3)
         if resp.status_code == 200:
-            data = resp.json()
-            lat = data.get('kismet.common.location.lat')
-            lon = data.get('kismet.common.location.lon')
-            if lat and lon:
-                return float(lat), float(lon)
+            lat, lon = _parse_kismet_gps_payload(resp.json())
+            if lat is not None and lon is not None:
+                return lat, lon
     except Exception:
         pass
 
@@ -235,11 +261,9 @@ def fetch_kismet_gps(kismet_url, username, password):
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if result.returncode == 0 and result.stdout.strip():
-            data = json.loads(result.stdout)
-            lat = data.get('kismet.common.location.lat')
-            lon = data.get('kismet.common.location.lon')
-            if lat and lon:
-                return float(lat), float(lon)
+            lat, lon = _parse_kismet_gps_payload(json.loads(result.stdout))
+            if lat is not None and lon is not None:
+                return lat, lon
     except Exception as e:
         logger.debug(f"prlctl exec GPS fallback failed: {e}")
 
