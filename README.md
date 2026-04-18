@@ -238,6 +238,34 @@ python3 surveillance_analyzer.py --output-json analysis_results.json
 python3 surveillance_analyzer.py --gps-file gps_coordinates.json
 ```
 
+### WATCHDOG Live Dashboard
+
+A Flask + SocketIO web dashboard that pulls live device data from Kismet's
+REST API and flags surveillance infrastructure (IP cameras, ALPR, drones,
+BLE trackers) in real time. Integrates camera/drone/BLE detectors and
+ALPR spatial context.
+
+```bash
+# Local Kismet (running on same host)
+python3 watchdog_dashboard.py --kismet-url http://localhost:2501 --port 5002
+
+# Kismet inside Parallels VM (auto-falls back to prlctl exec bridge)
+python3 watchdog_dashboard.py --kismet-url http://localhost:2501 --port 5002
+
+# Expose beyond localhost (e.g. LAN monitoring) — off by default for safety
+BIND_HOST=0.0.0.0 python3 watchdog_dashboard.py --kismet-url http://localhost:2501
+```
+
+Dashboard: <http://localhost:5002> — auto-refreshes every 10 s.
+
+**Default Kismet credentials** (`--kismet-user kismet --kismet-pass watchdog2026`)
+match the bundled `start_kismet_clean.sh` config. Override both flags in
+any deployment that is not the local dev VM.
+
+Detections are logged to `watchdog_live.db` (SQLite, created on first
+run). Coverage-area and nearby-ALPR context appear in the header when
+Kismet's GPS datasource is active.
+
 ### Ignore List Management
 ```bash
 # Create new ignore lists from current Kismet data
