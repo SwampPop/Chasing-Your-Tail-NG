@@ -17,11 +17,14 @@ import os
 import threading
 import time
 from datetime import datetime
+from types import SimpleNamespace
 
 import requests
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO
 
+from alpr_context import ALPRContext
+from ble_tracker_detector import BLETrackerDetector
 from camera_detector import CameraDetector
 from drone_signature_matcher import get_matcher as get_drone_matcher
 from watchdog_reporter import DetectionLogger
@@ -35,12 +38,19 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Global state
 detector = CameraDetector()
 drone_matcher = get_drone_matcher()
+ble_detector = BLETrackerDetector()
+alpr_ctx = ALPRContext()
 db_logger = DetectionLogger(db_path="watchdog_live.db")
 scan_stats = {
     "total_devices": 0,
     "cameras": 0,
     "alprs": 0,
     "drones": 0,
+    "trackers": 0,
+    "operator_lat": None,
+    "operator_lon": None,
+    "coverage_area": None,
+    "nearby_alprs": 0,
     "last_update": "",
     "kismet_status": "connecting",
 }
@@ -100,6 +110,13 @@ td { padding: 4px 6px; border-bottom: 1px solid #1a1a1a; }
 
 <h1>WATCHDOG LIVE DASHBOARD</h1>
 <div class="subtitle">Surveillance Device Detection | {{ last_update }} | Kismet: {{ kismet_url }}</div>
+{% if operator_lat and operator_lon %}
+<div class="subtitle">
+    GPS: {{ "%.4f"|format(operator_lat) }}, {{ "%.4f"|format(operator_lon) }}
+    {% if coverage_area %} | Area: <span class="yellow">{{ coverage_area }}</span>{% endif %}
+    {% if nearby_alprs %} | <span class="red">{{ nearby_alprs }} known ALPR{{ 's' if nearby_alprs != 1 else '' }} within 200m</span>{% endif %}
+</div>
+{% endif %}
 
 <div class="grid">
     <div class="stat"><div class="num cyan">{{ total_devices }}</div><div class="label">Total Devices</div></div>
@@ -195,6 +212,64 @@ def fetch_kismet_devices(kismet_url, username, password, last_seconds=30):
     return []
 
 
+def fetch_kismet_gps(kismet_url, username, password):
+    """Fetch current GPS position from Kismet. Returns (lat, lon) or (None, None)."""
+    try:
+        url = f"{kismet_url}/gps/location.json"
+        resp = requests.get(url, auth=(username, password), timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            lat = data.get('kismet.common.location.lat')
+            lon = data.get('kismet.common.location.lon')
+            if lat and lon:
+                return float(lat), float(lon)
+    except Exception:
+        pass
+
+    try:
+        import subprocess
+        cmd = [
+            'prlctl', 'exec', 'Kali Linux 2025.2 ARM64',
+            'curl', '-s', '-u', f'{username}:{password}',
+            'http://localhost:2501/gps/location.json',
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0 and result.stdout.strip():
+            data = json.loads(result.stdout)
+            lat = data.get('kismet.common.location.lat')
+            lon = data.get('kismet.common.location.lon')
+            if lat and lon:
+                return float(lat), float(lon)
+    except Exception as e:
+        logger.debug(f"prlctl exec GPS fallback failed: {e}")
+
+    return None, None
+
+
+def _extract_device_location(dev):
+    """Pull (lat, lon) from a Kismet device record, tolerating shape variance."""
+    loc = dev.get('kismet.device.base.location') or {}
+    for key in ('kismet.common.location.avg_loc', 'kismet.common.location.last_loc', None):
+        node = loc.get(key) if key else loc
+        if not isinstance(node, dict):
+            continue
+        lat = node.get('kismet.common.location.lat')
+        lon = node.get('kismet.common.location.lon')
+        if lat and lon:
+            try:
+                return float(lat), float(lon)
+            except (TypeError, ValueError):
+                continue
+        geopoint = node.get('kismet.common.location.geopoint')
+        if isinstance(geopoint, (list, tuple)) and len(geopoint) >= 2:
+            try:
+                # Kismet geopoint follows GeoJSON convention: [lon, lat]
+                return float(geopoint[1]), float(geopoint[0])
+            except (TypeError, ValueError):
+                continue
+    return 0.0, 0.0
+
+
 def process_devices(devices):
     """Run WATCHDOG detection on Kismet device list."""
     global recent_detections, all_devices, scan_stats
@@ -204,6 +279,7 @@ def process_devices(devices):
     camera_count = 0
     alpr_count = 0
     drone_count = 0
+    tracker_count = 0
 
     for dev in devices:
         mac = dev.get('kismet.device.base.macaddr', '')
@@ -214,34 +290,56 @@ def process_devices(devices):
         )
         channel = dev.get('kismet.device.base.channel', '0')
         dtype = dev.get('kismet.device.base.type', 'Unknown')
+        phy = dev.get('kismet.device.base.phyname', '')
 
         try:
             ch_int = int(str(channel).split(',')[0]) if channel else 0
         except (ValueError, TypeError):
             ch_int = 0
 
-        # Run WATCHDOG camera detection
-        cam_det = detector.detect(mac, name, signal, ch_int)
-
-        # Also check drone signatures
-        drone_result = drone_matcher.classify_device(mac, name)
-
         flagged = False
         flag_type = ""
 
-        if cam_det:
-            detections.append(cam_det)
-            db_logger.log_detection(cam_det)
-            flagged = True
-            flag_type = cam_det.device_type
-            if cam_det.device_type == 'camera':
-                camera_count += 1
-            elif cam_det.device_type == 'alpr':
-                alpr_count += 1
-        elif drone_result['is_drone']:
-            flagged = True
-            flag_type = 'drone'
-            drone_count += 1
+        if phy == 'BTLE':
+            lat, lon = _extract_device_location(dev)
+            ble_det = ble_detector.process_ble_advertisement(
+                mac=mac, name=name, rssi=signal,
+                latitude=lat, longitude=lon,
+            )
+            if ble_det:
+                detections.append(SimpleNamespace(
+                    device_type='tracker',
+                    manufacturer=ble_det.description,
+                    mac=ble_det.mac,
+                    ssid=f"{'FOLLOWING ' if ble_det.is_following else ''}{ble_det.tracker_type}",
+                    rssi=ble_det.rssi,
+                    channel='BLE',
+                    confidence=1.0 if ble_det.is_following else 0.5,
+                    detection_method='ble_persistence' if ble_det.is_following else 'ble_signature',
+                ))
+                flagged = True
+                flag_type = 'tracker'
+                tracker_count += 1
+        else:
+            # Run WATCHDOG camera detection
+            cam_det = detector.detect(mac, name, signal, ch_int)
+
+            # Also check drone signatures
+            drone_result = drone_matcher.classify_device(mac, name)
+
+            if cam_det:
+                detections.append(cam_det)
+                db_logger.log_detection(cam_det)
+                flagged = True
+                flag_type = cam_det.device_type
+                if cam_det.device_type == 'camera':
+                    camera_count += 1
+                elif cam_det.device_type == 'alpr':
+                    alpr_count += 1
+            elif drone_result['is_drone']:
+                flagged = True
+                flag_type = 'drone'
+                drone_count += 1
 
         device_list.append({
             'mac': mac,
@@ -265,6 +363,7 @@ def process_devices(devices):
         'cameras': camera_count,
         'alprs': alpr_count,
         'drones': drone_count,
+        'trackers': tracker_count,
         'last_update': datetime.now().strftime('%H:%M:%S'),
         'kismet_status': 'live',
     })
@@ -272,19 +371,26 @@ def process_devices(devices):
 
 @app.route('/')
 def dashboard():
+    total = scan_stats['total_devices']
+    flagged = (scan_stats['cameras'] + scan_stats['alprs']
+               + scan_stats['drones'] + scan_stats['trackers'])
     return render_template_string(
         DASHBOARD_HTML,
-        total_devices=scan_stats['total_devices'],
+        total_devices=total,
         cameras=scan_stats['cameras'],
         alprs=scan_stats['alprs'],
         drones=scan_stats['drones'],
-        trackers=0,  # BLE trackers would come from separate source
-        clean=scan_stats['total_devices'] - scan_stats['cameras'] - scan_stats['alprs'] - scan_stats['drones'],
+        trackers=scan_stats['trackers'],
+        clean=max(total - flagged, 0),
         detections=recent_detections,
         all_devices=all_devices,
         last_update=scan_stats['last_update'],
         kismet_status=scan_stats['kismet_status'],
         kismet_url=app.config.get('KISMET_URL', ''),
+        coverage_area=scan_stats['coverage_area'],
+        nearby_alprs=scan_stats['nearby_alprs'],
+        operator_lat=scan_stats['operator_lat'],
+        operator_lon=scan_stats['operator_lon'],
     )
 
 
@@ -294,11 +400,23 @@ def scan_loop(kismet_url, username, password, interval=10):
         devices = fetch_kismet_devices(kismet_url, username, password)
         if devices:
             process_devices(devices)
+
+            lat, lon = fetch_kismet_gps(kismet_url, username, password)
+            if lat is not None and lon is not None:
+                summary = alpr_ctx.get_context_summary(lat, lon)
+                scan_stats.update({
+                    'operator_lat': lat,
+                    'operator_lon': lon,
+                    'coverage_area': summary.get('coverage_area'),
+                    'nearby_alprs': summary.get('nearby_cameras', 0),
+                })
+
             logger.info(
                 f"Scan: {len(devices)} devices, "
                 f"{scan_stats['cameras']} cameras, "
                 f"{scan_stats['alprs']} ALPR, "
-                f"{scan_stats['drones']} drones"
+                f"{scan_stats['drones']} drones, "
+                f"{scan_stats['trackers']} trackers"
             )
         else:
             scan_stats['kismet_status'] = 'disconnected'
