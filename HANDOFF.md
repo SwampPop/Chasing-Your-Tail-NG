@@ -1,99 +1,105 @@
 # Handoff Document — CYT-NG
 
 **Created**: 2026-04-08 23:00
-**Last Updated**: 2026-04-19 10:00 CDT
-**Latest Session Duration**: ~1 h (restore from shutdown + Cox opt-out verification)
+**Last Updated**: 2026-04-19 20:00 CDT
+**Latest Session Duration**: ~2 h evening (delta analysis + supplemental report + clean shutdown)
 
 ## Goal
 
-Keep CYT-NG operational for continuous passive RF monitoring, and close out HN-012 (Cox public-hotspot opt-out) now that we have empirical evidence the self-service path failed.
+Maintain CYT-NG as an ongoing passive-monitoring platform for operator's residential RF environment. Close out HN-012 (Cox public-hotspot opt-out, now confirmed non-self-resolvable — pending Cox Tier 2 phone call).
 
-## Progress Summary — 2026-04-19 Session
+## Progress Summary — 2026-04-19 (two sessions)
 
-- ✅ Restored CYT-NG platform from Mac shutdown (Alfa USB + Kismet + dashboard)
-- ✅ Confirmed Cox hotspot VAPs (`:78` and `:80`) are **still beaconing** despite the 2026-04-18 self-service opt-out
-- ✅ Gateway reboot by user did NOT stop the broadcast — diagnosis: opt-out never propagated to Cox DOCSIS provisioning backend
-- ✅ Cox call-script + gateway identifiers filed to `~/Desktop/COX_HOTSPOT_OPT_OUT_FOLLOWUP_2026-04-19.md`
-- 🔄 Pending: user calls Cox (1-800-234-3993), requests Tier 2 / provisioning escalation
+### Morning (restoration + Cox verification)
+- ✅ Restored CYT-NG platform from Mac shutdown (Alfa re-seat required)
+- ✅ Kismet + dashboard back online
+- ✅ Empirically proved Cox self-service opt-out failed (pre-/post-reboot bracket)
+- ✅ Cox call-script filed to Desktop
+
+### Evening (delta + supplemental report + shutdown)
+- ✅ Delta-analyzed 4-hour capture: 666 devices, 58 probers, 40 new arrivals in last 10 min
+- ✅ Discovered **10 camera detections** in `watchdog_live.db` (Nest ×4, TP-Link ×4, Reolink ×1, Ubiquiti ×1)
+- ✅ HN-008 ("No surveillance infra") SUPERSEDED by HN-019 (neighbor cameras present)
+- ✅ 6 new findings documented: HN-019 through HN-024
+- ✅ `SUPPLEMENTAL_FIELD_REPORT_2026-04-19.md` (HNFR-SUPP-001, 20 KB) filed to both locations
+- ✅ Kismet + dashboard clean-shutdown — no orphan processes, DB preserved for next session
 
 ## Current State
 
-- **Git**: clean, `de68326` HEAD, in sync with origin/main
-- **Kali VM**: running; Kismet active (PID 887942 main + 887989 capture subprocess) on `wlan0`
-- **Dashboard**: running at `http://10.211.55.12:5002` (LAN-exposed; requires ProtonVPN "Allow LAN connections" on Mac)
-- **GPS**: u-blox connected but **NO FIX** (indoors, geopoint `[0, 0]`)
-- **Cox hotspot**: still active; user has a call to make
-- **Reports**: 3 2026-04-18 field reports + 1 new Cox follow-up doc on Desktop & `2_reference_docs/docs/network/`
+- **Git**: clean, `9512b9c` HEAD, in sync with origin/main
+- **Kali VM**: running, idle (nothing active except OS)
+- **Kismet**: **STOPPED** (clean shutdown this evening)
+- **Dashboard**: **STOPPED**
+- **Alfa + GPS**: still passed through to Kali
+- **watchdog_live.db on Kali**: preserved (24 KB, 10 camera detections baseline)
+- **Field reports**: 3 original (2026-04-18) + 1 supplemental (2026-04-19) + 1 Cox call-script (Desktop)
+- **Blocker**: user needs to call Cox Tier 2 (HN-012)
 
 ## What Worked
 
-- **Immediate physical-first diagnosis** of the shutdown-recovery failure: when Kali had no `wlan0`, we correctly skipped to `lsusb` on Kali + `system_profiler` on Mac, identified the Alfa wasn't bussed at all, and asked user to re-seat instead of chasing software fixes.
-- **Bracketing-the-reboot verification**: capturing Cox VAP state both before AND after the user's gateway reboot gave us definitive evidence the opt-out never reached Cox's backend. No ambiguity, no "did the reboot help?" loop.
-- **Dedicated Desktop follow-up doc**: keeps the call script + gateway identifiers in one findable place for when the user actually calls Cox (sometimes days later).
+- **Sqlite detection-log discovery**: checking `/home/parallels/CYT/watchdog_live.db` after 4+ hours of capture revealed the 10 camera detections we missed yesterday. Demonstrates the importance of longer observation windows.
+- **Supplemental report format**: cleaner than editing three dated reports. New findings IDs (HN-019–HN-024) extend the existing numbering cleanly; old findings get status updates in a table.
+- **Bracket-around-reboot verification**: capturing Cox VAP state pre- and post-user-reboot definitively closed the "did reboot help?" question.
 
 ## What Didn't Work
 
-- **Cox self-service opt-out** (attempted 2026-04-18) — clicked through cox.com/myprofile flow, UI confirmed the toggle, but backend provisioning never picked it up. Will now require a human at Cox to push it.
-- **Gateway reboot as a supposed fix** — reboot only re-pulls whatever config Cox has on file. If the opt-out isn't on file, reboot achieves nothing. Don't suggest this path again for other ISP-provisioned features without confirming the opt-out is actually recorded upstream.
+- **Self-service Cox hotspot opt-out**: click-through completed yesterday, empirically disproven today. Documented as anti-pattern (HN-024).
+- **Gateway reboot as public-hotspot mitigation**: same — boot just re-pulls same DOCSIS config.
 
 ## Next Steps
 
-1. **User calls Cox** (1-800-234-3993) using the script in `~/Desktop/COX_HOTSPOT_OPT_OUT_FOLLOWUP_2026-04-19.md`; escalate to Tier 2 / network-provisioning
-2. Wait 10–15 min after Cox confirms the change propagates
-3. Run the Kismet verification pull (command inline in the Desktop doc) to confirm `:78` and `:80` are silent
-4. **If confirmed silent**: update HN-012 to CLOSED across the 3 field reports in `2_reference_docs/docs/network/`
-5. **If still active**: escalate via Cox social (@CoxHelp on Twitter/X) — some users report faster config-propagation from there than phone
-6. Still-open from yesterday: BT adapter purchase for HN-009 coverage
+1. **User calls Cox Tier 2** (1-800-234-3993). Script: `~/Desktop/COX_HOTSPOT_OPT_OUT_FOLLOWUP_2026-04-19.md`. Explicitly reference BSSIDs `:78` and `:80`, CM MAC `6C:55:E8:7A:29:6F`, serial `212930060123104946`.
+2. After Cox confirms: wait 10–15 min for propagation, tell ARES-1 "check now".
+3. ARES-1 restarts Kismet + dashboard, runs verification query, updates HN-012 → CLOSED across reports if successful.
+4. Optional: if operator wants, longer runtime continues to accumulate camera / transient-prober data for weekly trend analysis.
 
 ## Blockers
 
-- **HN-012 — Cox public hotspot**: blocked on operator phone call to Cox. Not actionable from code / own side.
+- **HN-012**: blocked on operator phone call to Cox. Not actionable from code / own side.
 
 ## Key Files
 
-**Fresh from this session**:
-- `~/Desktop/COX_HOTSPOT_OPT_OUT_FOLLOWUP_2026-04-19.md` — the call script + MACs + serials
+**Fresh this evening**:
+- `~/my_projects/2_reference_docs/docs/network/SUPPLEMENTAL_FIELD_REPORT_2026-04-19.md` + Desktop copy
 
-**Still-current from 2026-04-18**:
-- 3 field reports (Desktop + `2_reference_docs/docs/network/`) — HOME_NETWORK_FIELD_REPORT, WPS_VULNERABILITY_TEST_REPORT, HOUSEHOLD_DEVICE_PROFILES
+**Still-current from earlier sessions**:
+- 3 2026-04-18 field reports (HNFR-001, WPS-001, HDP-001)
+- `~/Desktop/COX_HOTSPOT_OPT_OUT_FOLLOWUP_2026-04-19.md` (call script)
 
-**Session log**:
-- `~/AI-Sessions/logs/session-2026-04-19.md`
+**Session logs**:
+- `~/AI-Sessions/logs/session-2026-04-19.md` (morning)
+- `~/AI-Sessions/logs/session-2026-04-19-evening.md` (this evening)
 
 ## Commands to Resume
 
 ```bash
-# Verify Kismet still running:
-prlctl exec "Kali Linux 2025.2 ARM64" "pgrep -af 'kismet -c'"
+# Re-start Kismet + dashboard on Kali after Mac/VM wake:
+prlctl exec "Kali Linux 2025.2 ARM64" "iw dev wlan0 info 2>&1 | grep type"
+# If "no wlan0": physically re-seat Alfa USB first
 
-# Cox hotspot re-verification (run after Cox call + 10-min propagation wait):
+prlctl exec "Kali Linux 2025.2 ARM64" "airmon-ng check kill && airmon-ng start wlan0"
+prlctl exec "Kali Linux 2025.2 ARM64" "cd /home/parallels/CYT && ./start_kismet_clean.sh wlan0"
+prlctl exec "Kali Linux 2025.2 ARM64" \
+  "cd /home/parallels/CYT && nohup bash -c 'BIND_HOST=0.0.0.0 python3 watchdog_dashboard.py --kismet-url http://localhost:2501 --port 5002' > /tmp/watchdog.log 2>&1 &"
+
+# Post-Cox-call verification (one-liner):
 prlctl exec "Kali Linux 2025.2 ARM64" \
   "curl -s -u kismet:watchdog2026 http://localhost:2501/devices/last-time/-600/devices.json \
    | python3 -c 'import json,sys; d=json.load(sys.stdin); now=max(x.get(\"kismet.device.base.last_time\",0) for x in d); [print(x[\"kismet.device.base.macaddr\"], \"age:\", now-x.get(\"kismet.device.base.last_time\",0), \"sec\") for x in d if x.get(\"kismet.device.base.macaddr\") in (\"6C:55:E8:7A:29:78\",\"6C:55:E8:7A:29:80\")]'"
 
-# Expected SUCCESS result: either MACs not in output (no beacons in 10-min window), or age > 300 seconds.
-# Expected FAILURE result: age < 120 seconds — still actively beaconing.
-
-# Stop Kismet when ready:
-prlctl exec "Kali Linux 2025.2 ARM64" "pkill -9 kismet"
-
-# Stop dashboard:
-prlctl exec "Kali Linux 2025.2 ARM64" "pkill -f watchdog_dashboard"
-
-# Full restart from scratch (if USB needs re-seating):
-# 1. Physically reseat Alfa USB if no wlan0
-# 2. prlctl exec "Kali Linux 2025.2 ARM64" "airmon-ng check kill && airmon-ng start wlan0"
-# 3. prlctl exec "Kali Linux 2025.2 ARM64" "cd /home/parallels/CYT && ./start_kismet_clean.sh wlan0"
-# 4. prlctl exec "Kali Linux 2025.2 ARM64" "cd /home/parallels/CYT && nohup bash -c 'BIND_HOST=0.0.0.0 python3 watchdog_dashboard.py --kismet-url http://localhost:2501 --port 5002' > /tmp/watchdog.log 2>&1 &"
+# Query detection database (persistent across sessions):
+prlctl exec "Kali Linux 2025.2 ARM64" \
+  "sqlite3 -header -column /home/parallels/CYT/watchdog_live.db 'SELECT * FROM detections ORDER BY rowid DESC LIMIT 15;'"
 ```
 
 ## Session Stats
 
-- **Devices captured before session close**: 423 (in ~15-min fresh window, post-restart)
-- **Cox VAPs status**: `:78` beaconing 1s ago, `:80` beaconing 9s ago (at last verification)
-- **Operator VAPs**: 10 of 10 visible, 45,126 combined packets
-- **Commits this session**: 0 (nothing to commit — no repo changes)
+- Devices in 4-hour window: 666
+- Camera detections in DB: 10 (across yesterday + today)
+- Probers captured: 58
+- Operator VAPs visible: 10 / 10
+- Commits this evening: 0 (clean git state; supplemental report lives in private reference_docs)
 
 ---
 
-**Status**: Complete | **Confidence**: High | **Blocker**: Cox call pending
+**Status**: Complete — platform at rest | **Confidence**: High | **Blocker**: Cox Tier 2 call pending
