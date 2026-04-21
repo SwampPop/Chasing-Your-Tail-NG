@@ -11,6 +11,7 @@ Usage:
 Requires Kismet running with API access.
 """
 import argparse
+import atexit
 import json
 import logging
 import os
@@ -38,9 +39,13 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Global state
 detector = CameraDetector()
 drone_matcher = get_drone_matcher()
+# Shared lock protecting ble_detector writes across the Flask scan thread
+# and the Mac-native bleak scanner thread.
+ble_detector_lock = threading.Lock()
 ble_detector = BLETrackerDetector()
 alpr_ctx = ALPRContext()
 db_logger = DetectionLogger(db_path="watchdog_live.db")
+mac_ble_scanner = None  # MacOSBLEScanner, started from main() if enabled
 scan_stats = {
     "total_devices": 0,
     "cameras": 0,
@@ -326,10 +331,11 @@ def process_devices(devices):
 
         if phy == 'BTLE':
             lat, lon = _extract_device_location(dev)
-            ble_det = ble_detector.process_ble_advertisement(
-                mac=mac, name=name, rssi=signal,
-                latitude=lat, longitude=lon,
-            )
+            with ble_detector_lock:
+                ble_det = ble_detector.process_ble_advertisement(
+                    mac=mac, name=name, rssi=signal,
+                    latitude=lat, longitude=lon,
+                )
             if ble_det:
                 detections.append(SimpleNamespace(
                     device_type='tracker',
@@ -376,6 +382,23 @@ def process_devices(devices):
             'flag_type': flag_type,
         })
 
+    # Drain trackers captured by the Mac-native scanner (bleak) — Kismet's BLE
+    # path may be dark if no BT radio is passed through to the VM. Dedup by MAC
+    # so devices seen by both Kismet and host don't double-count.
+    seen_macs = {d.mac for d in detections if hasattr(d, 'mac')}
+    with ble_detector_lock:
+        active = list(ble_detector.get_active_trackers(max_age_seconds=120))
+    for tracker in active:
+        if tracker.mac in seen_macs:
+            continue
+        det = _make_tracker_detection(tracker)
+        detections.append(det)
+        try:
+            db_logger.log_detection(det)
+        except Exception as e:
+            logger.debug("watchdog_live.db write failed for %s: %s", det.mac, e)
+        tracker_count += 1
+
     # Sort: flagged devices first, then by signal strength
     device_list.sort(key=lambda x: (not x['flagged'], x['signal']), reverse=False)
     device_list.sort(key=lambda x: x['flagged'], reverse=True)
@@ -418,6 +441,61 @@ def dashboard():
     )
 
 
+def _make_tracker_detection(tracker):
+    """Build a SimpleNamespace shaped like CameraDetection from a BLETrackerDetection.
+
+    Populates every field db_logger.log_detection() reads so host-BLE trackers
+    are durably recorded in watchdog_live.db alongside cameras/ALPRs."""
+    lat, lon = 0.0, 0.0
+    if tracker.locations:
+        lat, lon = tracker.locations[-1]
+    return SimpleNamespace(
+        device_type='tracker',
+        manufacturer=tracker.description,
+        mac=tracker.mac,
+        ssid=f"{'FOLLOWING ' if tracker.is_following else ''}{tracker.tracker_type}",
+        rssi=tracker.rssi,
+        channel='BLE',
+        confidence=1.0 if tracker.is_following else 0.5,
+        detection_method='ble_persistence' if tracker.is_following else 'ble_signature',
+        latitude=lat,
+        longitude=lon,
+        timestamp=tracker.last_seen or time.time(),
+        is_setup_mode=False,
+        match_details={
+            'tracker_type': tracker.tracker_type,
+            'seen_count': tracker.seen_count,
+            'is_following': tracker.is_following,
+            'first_seen': tracker.first_seen,
+            'unique_locations': len(set(tracker.locations)) if tracker.locations else 0,
+        },
+    )
+
+
+def _drain_host_ble_only():
+    """When Kismet is unreachable, still surface Mac-native BLE trackers to the
+    dashboard so coverage isn't lost. Publishes into recent_detections and
+    scan_stats['trackers'] using the same shape as process_devices, and
+    persists each to watchdog_live.db."""
+    global recent_detections
+    with ble_detector_lock:
+        active = list(ble_detector.get_active_trackers(max_age_seconds=120))
+    detections = []
+    for tracker in active:
+        det = _make_tracker_detection(tracker)
+        detections.append(det)
+        try:
+            db_logger.log_detection(det)
+        except Exception as e:
+            logger.debug("watchdog_live.db write failed for %s: %s", det.mac, e)
+    recent_detections = detections
+    scan_stats.update({
+        'trackers': len(detections),
+        'last_update': datetime.now().strftime('%H:%M:%S'),
+        'kismet_status': 'disconnected',
+    })
+
+
 def scan_loop(kismet_url, username, password, interval=10):
     """Background thread: continuously fetch and process Kismet data."""
     while True:
@@ -443,8 +521,18 @@ def scan_loop(kismet_url, username, password, interval=10):
                 f"{scan_stats['trackers']} trackers"
             )
         else:
-            scan_stats['kismet_status'] = 'disconnected'
+            _drain_host_ble_only()
         time.sleep(interval)
+
+
+def _load_bluetooth_settings():
+    """Return config.json['bluetooth_settings'] or {} if missing/unreadable."""
+    try:
+        with open('config.json', 'r') as f:
+            return json.load(f).get('bluetooth_settings', {}) or {}
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.debug("bluetooth_settings unavailable: %s", e)
+        return {}
 
 
 def main():
@@ -471,6 +559,51 @@ def main():
     )
     scan_thread.start()
 
+    # Optional: start Mac-native BLE scanner (bleak/CoreBluetooth)
+    global mac_ble_scanner
+    bt_cfg = _load_bluetooth_settings()
+    if bt_cfg.get('enabled', False):
+        try:
+            from macos_ble_scanner import MacOSBLEScanner, build_kismet_gps_fetcher
+
+            # Tune follow thresholds on the existing detector (no rebind —
+            # scan_thread already captured the current instance).
+            with ble_detector_lock:
+                ble_detector.follow_threshold_minutes = int(
+                    bt_cfg.get('follow_threshold_minutes', 30))
+                ble_detector.follow_threshold_locations = int(
+                    bt_cfg.get('follow_threshold_locations', 2))
+            gps_fetcher = None
+            if bt_cfg.get('gps_source', 'kismet') == 'kismet':
+                gps_fetcher = build_kismet_gps_fetcher(
+                    args.kismet_url, args.kismet_user, args.kismet_pass,
+                )
+            mac_ble_scanner = MacOSBLEScanner(
+                ble_detector=ble_detector,
+                detector_lock=ble_detector_lock,
+                gps_fetcher=gps_fetcher,
+                gps_cache_seconds=float(bt_cfg.get('gps_cache_seconds', 2.0)),
+            )
+            mac_ble_scanner.start()
+            atexit.register(mac_ble_scanner.stop)
+            logger.info(
+                "Mac-native BLE scanner enabled "
+                "(gps_source=%s, gps_cache=%ss, follow>=%smin/%sloc)",
+                bt_cfg.get('gps_source'),
+                bt_cfg.get('gps_cache_seconds'),
+                bt_cfg.get('follow_threshold_minutes'),
+                bt_cfg.get('follow_threshold_locations'),
+            )
+        except ImportError as e:
+            logger.warning(
+                "bluetooth_settings.enabled=true but bleak not installed: %s. "
+                "Host-BLE scan disabled. Run: pip3 install 'bleak>=0.22'", e,
+            )
+        except Exception as e:
+            logger.exception("Failed to start Mac-native BLE scanner: %s", e)
+    else:
+        logger.info("Mac-native BLE scanner disabled (bluetooth_settings.enabled=false)")
+
     print(f"\n{'='*60}")
     print(f"  WATCHDOG LIVE DASHBOARD")
     print(f"  Kismet: {args.kismet_url}")
@@ -478,6 +611,7 @@ def main():
     print(f"  Scan interval: {args.interval}s")
     print(f"  Camera OUIs: {len(detector.camera_ouis)}")
     print(f"  ALPR patterns: {len(detector.alpr_ssid_patterns)}")
+    print(f"  Host BLE: {'on' if mac_ble_scanner else 'off'}")
     print(f"{'='*60}\n")
 
     bind_host = os.getenv("BIND_HOST", "127.0.0.1")

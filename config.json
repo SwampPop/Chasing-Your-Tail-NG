@@ -117,6 +117,14 @@
     "location_threshold_meters": 100,
     "session_timeout_seconds": 600
   },
+  "bluetooth_settings": {
+    "enabled": true,
+    "gps_source": "kismet",
+    "gps_cache_seconds": 0.5,
+    "follow_threshold_minutes": 30,
+    "follow_threshold_locations": 2,
+    "log_level": "INFO"
+  },
   "wigle": {
     "api_name": "",
     "api_token": "",
