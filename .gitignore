@@ -48,6 +48,8 @@ CYT_STABILIZATION_PROMPT.md
 
 # Watchdog runtime artifacts
 watchdog_live.db
+attacker_detections.json
+attacker_hunt.log
 
 # Operational data (PII - never commit)
 device_aliases.json

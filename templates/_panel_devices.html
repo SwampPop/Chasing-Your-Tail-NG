@@ -1,0 +1,51 @@
+{% if detections %}
+<div id="panel-detections" class="panel" style="border-color: #ff4444;">
+    <h2 style="color: #ff4444;">DETECTIONS (<span id="detections-count">{{ detections|length }}</span>)</h2>
+    <table>
+        <thead>
+            <tr><th>Type</th><th>Manufacturer</th><th>MAC</th><th>SSID</th><th>RSSI</th><th>CH</th><th>Conf</th><th>Method</th></tr>
+        </thead>
+        <tbody id="detections-body">
+        {% for d in detections %}
+            <tr class="{% if d.device_type == 'alpr' %}alert-row{% elif d.device_type == 'drone' %}drone-row{% else %}camera-row{% endif %}">
+                <td><span class="badge badge-{{ d.device_type }}">{{ d.device_type | upper }}</span></td>
+                <td>{{ d.manufacturer }}</td>
+                <td>{{ d.mac }}</td>
+                <td>{{ d.ssid or '-' }}</td>
+                <td>{{ d.rssi }} dBm</td>
+                <td>{{ d.channel }}</td>
+                <td>{{ "%.0f"|format(d.confidence * 100) }}%</td>
+                <td>{{ d.detection_method }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div id="panel-detections-empty" class="panel" style="border-color: #00ff41;">
+    <h2 style="color: #00ff41;">ALL CLEAR</h2>
+    <p style="color: #00ff41; text-align: center; padding: 20px;">No surveillance devices detected in current scan</p>
+</div>
+{% endif %}
+
+<div class="panel">
+    <h2>ALL DEVICES (<span id="all-devices-shown">{{ all_devices|length }}</span> shown, <span id="all-devices-total">{{ total_devices }}</span> total)</h2>
+    <table>
+        <thead>
+            <tr><th>MAC</th><th>Manufacturer</th><th>Type</th><th>Name/SSID</th><th>RSSI</th><th>CH</th><th>Status</th></tr>
+        </thead>
+        <tbody id="all-devices-body">
+        {% for d in all_devices[:50] %}
+            <tr>
+                <td>{{ d.mac }}</td>
+                <td>{{ d.manuf }}</td>
+                <td>{{ d.type }}</td>
+                <td>{{ d.name }}</td>
+                <td>{{ d.signal }} dBm</td>
+                <td>{{ d.channel }}</td>
+                <td>{% if d.flagged %}<span class="badge badge-{{ d.flag_type }}">{{ d.flag_type | upper }}</span>{% else %}<span style="color:#333;">clean</span>{% endif %}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>

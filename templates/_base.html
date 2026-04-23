@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>{% block title %}WATCHDOG Live Dashboard{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mission_control.css') }}">
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div class="kismet-status">
+    <span id="kismet-badge" class="badge {% if kismet_status == 'live' %}badge-clear{% else %}badge-alpr{% endif %}">
+        KISMET: {{ kismet_status | upper }}
+    </span>
+</div>
+
+<h1>WATCHDOG MISSION CONTROL</h1>
+<div class="subtitle">
+    Surveillance Device Detection |
+    <span id="last-update">{{ last_update }}</span> |
+    Kismet: {{ kismet_url }}
+</div>
+<div class="subtitle" id="gps-line" {% if not operator_lat or not operator_lon %}style="display:none;"{% endif %}>
+    GPS: <span id="gps-lat">{{ "%.4f"|format(operator_lat) if operator_lat else '--' }}</span>,
+    <span id="gps-lon">{{ "%.4f"|format(operator_lon) if operator_lon else '--' }}</span>
+    <span id="coverage-area-wrap" {% if not coverage_area %}style="display:none;"{% endif %}>
+        | Area: <span id="coverage-area" class="yellow">{{ coverage_area }}</span>
+    </span>
+    <span id="nearby-alprs-wrap" {% if not nearby_alprs %}style="display:none;"{% endif %}>
+        | <span class="red"><span id="nearby-alprs">{{ nearby_alprs }}</span> known ALPR within 200m</span>
+    </span>
+</div>
+
+<div id="attack-banner" class="attack-banner hidden">
+    <span class="attack-banner-label">ATTACK DETECTED</span>
+    <span id="attack-banner-text"></span>
+</div>
+
+{% block content %}{% endblock %}
+
+<div class="subtitle" style="text-align: center; margin-top: 10px;">
+    WATCHDOG / CYT-NG / ARES-1 | Live push via SocketIO | Phase 1: Passive Detection
+</div>
+
+<script src="{{ url_for('static', filename='js/socket_client.js') }}"></script>
+</body>
+</html>

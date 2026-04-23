@@ -1,0 +1,21 @@
+<div id="panel-attacks" class="panel attack-panel {% if not attacks %}hidden{% endif %}">
+    <h2 style="color: #ff4444;">ACTIVE ATTACKS (<span id="attacks-count">{{ attacks|length if attacks else 0 }}</span>)</h2>
+    <table>
+        <thead>
+            <tr><th>Time</th><th>Type</th><th>Severity</th><th>MAC</th><th>Signal</th><th>Count</th><th>Reason</th></tr>
+        </thead>
+        <tbody id="attacks-body">
+        {% for a in (attacks or []) %}
+            <tr class="alert-row">
+                <td>{{ a.ts_human }}</td>
+                <td><span class="badge badge-attack">{{ a.attack_type }}</span></td>
+                <td class="sev-{{ a.severity }}">{{ a.severity | upper }}</td>
+                <td>{{ a.mac }}</td>
+                <td>{{ a.signal }} dBm</td>
+                <td>{{ a.count }}</td>
+                <td>{{ a.reason }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>

@@ -119,8 +119,12 @@ class DeviceTracking:
 class AttackerHunter:
     """Main attacker hunting engine"""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, alert_callback=None):
+        """alert_callback(alert_dict) is invoked from alert() for each new
+        suspicious-device trigger. Used by watchdog_dashboard.py to fan out
+        to SocketIO + persist to the attacks table."""
         self.config = config
+        self.alert_callback = alert_callback
         self.devices: Dict[str, DeviceTracking] = {}
         self.suspicious_devices: Dict[str, DeviceTracking] = {}
         self.alerts: List[dict] = []
@@ -162,6 +166,12 @@ class AttackerHunter:
 
         # Add to suspicious devices
         self.suspicious_devices[device.mac] = device
+
+        if self.alert_callback is not None:
+            try:
+                self.alert_callback(alert_data)
+            except Exception as exc:
+                self.log(f"alert_callback raised: {exc}", "ERROR")
 
         # Save immediately
         self.save_data()

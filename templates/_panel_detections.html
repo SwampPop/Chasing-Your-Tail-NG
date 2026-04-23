@@ -1,0 +1,26 @@
+<div class="grid">
+    <div class="stat">
+        <div id="stat-total" class="num cyan">{{ total_devices }}</div>
+        <div class="label">Total Devices</div>
+    </div>
+    <div class="stat">
+        <div id="stat-cameras" class="num {% if cameras > 0 %}red{% else %}green{% endif %}">{{ cameras }}</div>
+        <div class="label">Cameras</div>
+    </div>
+    <div class="stat">
+        <div id="stat-alprs" class="num {% if alprs > 0 %}red{% else %}green{% endif %}">{{ alprs }}</div>
+        <div class="label">ALPR</div>
+    </div>
+    <div class="stat">
+        <div id="stat-drones" class="num {% if drones > 0 %}orange{% else %}green{% endif %}">{{ drones }}</div>
+        <div class="label">Drones</div>
+    </div>
+    <div class="stat">
+        <div id="stat-trackers" class="num {% if trackers > 0 %}purple{% else %}green{% endif %}">{{ trackers }}</div>
+        <div class="label">BLE Trackers</div>
+    </div>
+    <div class="stat">
+        <div id="stat-clean" class="num green">{{ clean }}</div>
+        <div class="label">Clean</div>
+    </div>
+</div>

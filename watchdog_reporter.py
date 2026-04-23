@@ -93,6 +93,27 @@ class DetectionLogger:
             CREATE INDEX IF NOT EXISTS idx_detections_mac
             ON detections(mac)
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS attacks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts REAL NOT NULL,
+                mac TEXT NOT NULL,
+                attack_type TEXT,
+                severity TEXT,
+                reason TEXT,
+                signal INTEGER,
+                count INTEGER DEFAULT 1,
+                evidence TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_attacks_mac
+            ON attacks(mac)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_attacks_ts
+            ON attacks(ts)
+        """)
         conn.commit()
         conn.close()
 
@@ -140,6 +161,46 @@ class DetectionLogger:
 
         conn.commit()
         conn.close()
+
+    def log_attack(self, alert: Dict) -> None:
+        """Persist an attack alert (deauth, disassoc, brief appearance, etc.).
+
+        Expected keys: ts (float), mac, attack_type, severity, reason,
+        signal (int), count (int), evidence (dict — serialized to JSON).
+        Any missing key is substituted with a sensible default.
+        """
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                """
+                INSERT INTO attacks
+                (ts, mac, attack_type, severity, reason, signal, count, evidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    float(alert.get("ts", time.time())),
+                    alert.get("mac", ""),
+                    alert.get("attack_type", "UNKNOWN"),
+                    alert.get("severity", "med"),
+                    alert.get("reason", ""),
+                    int(alert.get("signal", 0) or 0),
+                    int(alert.get("count", 1) or 1),
+                    json.dumps(alert.get("evidence", {})),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_recent_attacks(self, limit: int = 100) -> List[Dict]:
+        """Return the most recent attacks, newest first."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM attacks ORDER BY ts DESC LIMIT ?", (limit,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     def get_all_detections(self) -> List[Dict]:
         """Retrieve all detections."""

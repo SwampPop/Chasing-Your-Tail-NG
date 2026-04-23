@@ -1,120 +1,191 @@
 # Handoff Document — CYT-NG
 
 **Created**: 2026-04-08 23:00
-**Last Updated**: 2026-04-21 11:11 CDT
-**Latest Session Duration**: ~10 h (integration + 7 h overnight capture + review exports)
+**Last Updated**: 2026-04-22 18:00 CDT
+**Latest Session Duration**: ~12 h (UI unification + AttackerHunter integration + eventbus client + reports bundle)
 
 ## Goal
 
-Maintain CYT-NG as a passive-monitoring platform for operator's residential and mobile RF environment. Expand coverage to Bluetooth Low Energy without introducing new hardware. Close out HN-012 (Cox public-hotspot opt-out, pending Cox Tier 2 call).
+Evolve CYT-NG from a passive-monitoring platform into a unified "mission control" real-time counter-surveillance dashboard with:
+- Real-time delivery (SocketIO push, not page refresh)
+- Full active-attack detection surface (DEAUTH / DISASSOC / KARMA / APSPOOF)
+- Editable UI (templates + CSS + JS, not embedded Python strings)
+- Sub-second alert latency via Kismet eventbus subscription
+- Longitudinal device profiling (follower-candidate classifier) — design complete, implementation pending
+- Platform portability toward a dedicated sensor (Jetson/Pi) — design complete, build pending
 
-## Progress Summary — 2026-04-21
+## Progress Summary — 2026-04-22
 
-### Mac-native Bluetooth integration (new)
-- ✅ Completed the unfinished `bleak` path in `ble_tracker_detector.py` (docstring advertised both Kismet and bleak sources — only the Kismet half was wired)
-- ✅ New module `macos_ble_scanner.py` — `bleak.BleakScanner` in a dedicated asyncio thread, lock-protected writes to shared `BLETrackerDetector`, Kismet GPS fetcher with cache
-- ✅ New test file `tests/test_macos_ble_scanner.py` — 13 tests (classifier, GPS cache, lock contention, dashboard drain, Kismet dedup, DB persistence)
-- ✅ Wired into `watchdog_dashboard.py`: shared `ble_detector_lock`, scanner lifecycle, `atexit` cleanup, drain pattern in `process_devices()`, Kismet-down fallback, `db_logger.log_detection()` for durability
-- ✅ Added `bleak>=0.22` + `bluetooth_settings` config block
-- ✅ Full test suite 74/74 green, live scanner verified (158 callbacks / 6 s), dashboard HTML renders BLE rows
+### Mission-control UI unification
 
-### Overnight + morning capture
-- ✅ 7 h continuous run (02:45 → 09:44) wrapping `python3 watchdog_dashboard.py` in `caffeinate -dims`
-- ✅ **12 WiFi cameras** (8 new tonight): most persistent is Nest `18:B4:30:93:F7:20` with 340 sightings over 284 min at RSSI -78 (likely neighbor's camera)
-- ✅ **2,921 BLE tracker identifiers** / **63,989 total sightings** — 2,686 Apple Find My, 224 Samsung SmartTag, 11 Tile
-- ✅ 4 "lives-here" candidates (5+ h persistence, thousands of sightings each, RSSI -54 to -89) — operator's own devices
-- ✅ Review CSVs produced: `review_20260421/all_detections.csv`, `tracker_details.csv`
-- ⚠️ Zero `FOLLOWING` alerts — u-blox never locked satellites indoors, so the "2+ locations" criterion never fired
+- ✅ Extracted embedded `DASHBOARD_HTML` string (was 120 lines in `watchdog_dashboard.py`) into Jinja templates + static CSS/JS
+- ✅ `templates/_base.html`, `dashboard.html`, `_panel_detections.html`, `_panel_devices.html`, `_panel_alerts.html`
+- ✅ `static/css/mission_control.css` (CSS variables, attack-flash animation)
+- ✅ `static/js/socket_client.js` (SocketIO client, DOM updates, HTML-escape)
+- ✅ Browser reload is sufficient for visual changes — no Python restart needed
+
+### Real-time push (replaces meta-refresh)
+
+- ✅ SocketIO emits wired: `system_status`, `device_update`, `detection`, `attack_alert`
+- ✅ Threading-mode SocketIO (no eventlet conflict with asyncio/bleak)
+- ✅ Attack alerts rate-limited 1/sec/MAC; persistence unaffected
+- ✅ UI gate `UI_SURFACE_ATTACK_TYPES = {DEAUTH, DISASSOC, TARGETING}` — soft heuristics persist to DB but don't flash banner
+
+### AttackerHunter integration (formerly orphaned)
+
+- ✅ Added `alert_callback=None` kwarg to `AttackerHunter.__init__`; invoked from `alert()`
+- ✅ `on_attack_alert()` in dashboard normalizes AttackerHunter output → classifier → DB + SocketIO
+- ✅ `_classify_attack()` derives (attack_type, severity, count) from flag set
+- ✅ `attacks` table added to `watchdog_live.db` via `DetectionLogger.log_attack()`
+- ✅ REST-polling path auto-skips Kismet alert fetch when eventbus is connected (no double-fire)
+
+### Kismet eventbus WebSocket client
+
+- ✅ New module `kismet_eventbus.py` — `KismetEventbusClient` class, threaded, exponential-backoff reconnect
+- ✅ Subscribes to `ALERT` + `TIMESTAMP` topics by default
+- ✅ `--eventbus` CLI flag on dashboard (off by default — safe fallback to REST polling)
+- ✅ `_handle_eventbus_message()` translates Kismet ALERT shape → AttackerHunter alert shape → `on_attack_alert`
+- ✅ Verified end-to-end on live Kismet: sub-second latency (log line `kismet eventbus connected: topics=ALERT,TIMESTAMP`)
+
+### Test coverage
+
+- ✅ 64 → 94 passing (+30 net, includes previously-skipped BLE tests now running with `bleak` installed)
+- ✅ 7 new tests: `test_socketio_emit.py`
+- ✅ 2 new tests: `test_attacker_integration.py`
+- ✅ 6 new tests: `test_kismet_eventbus.py`
+- ✅ Zero regressions in pre-existing suite
+
+### Documentation
+
+- ✅ `docs/GREENFIELD_MOBILE_SENSOR_DESIGN.md` — comprehensive design for a mobile counter-surveillance sensor (~800 lines). Covers hardware tiers, software stack, follower-candidate classifier algorithm, LLM integration, operator UX, security/OPSEC, deployment scenarios.
+- ✅ `~/Desktop/CYT-NG-Reports-2026-04-22/` — 5-file reports bundle (~3,100 lines total):
+  - `00_README.md` (navigation + cross-document narrative)
+  - `01_CYT-NG_Current_State_Report.md` (architecture, shortcomings, friction, technical debt)
+  - `02_Tier_II_Professional_Build_with_HackRF.md` (~$2,500 Jetson Orin Nano Super build)
+  - `03_Tier_III_Individual_Operator_Build.md` (~$5,200 AGX Orin + DF + hardened OPSEC)
+  - `04_TSCM_Industry_Teams_Training_Gear.md` (industry overview, methodology, gear catalog)
+
+### Session hygiene fixes (unrelated but urgent)
+
+- ✅ Diagnosed + resolved 278 GiB disk exhaustion (runaway `/tmp/security-audit-2026-04.log` from misconfigured launchd `com.security.monthly-compliance-audit.plist` with `RunAtLoad=true`)
+- ✅ launchd plist unloaded; underlying audit-script bug (unbounded output) left for operator review
 
 ## Current State
 
-- **Git**: `5cd5394` HEAD + uncommitted work (4 modified, 2 new files + `review_20260421/`)
-- **Kali VM**: running; Kismet stopped at session close
-- **Mac dashboard**: stopped; all processes clean
-- **Hardware**: Alfa WiFi adapter + u-blox GNSS puck removed (user unplugged for mobility)
-- **Database**: `watchdog_live.db` preserved, 204 KB, 2,935 detection rows
+- **Git**: `7b70d8a` + uncommitted session work (ready to commit at session close)
+- **Kali VM**: running; Kismet PID varies, wlan0 in monitor mode (fragile — lost twice during VM restarts today)
+- **Mac dashboard**: running on port 5002 with `--eventbus` active at last check; PID 81256
+- **Hardware**: Alfa AWUS1900 (RTL8814AU) + u-blox 8 GNSS both connected to VM; operator re-toggled after VM restart flapped them
+- **Database**: `watchdog_live.db` retained with latest session's detections + false-positive `BRIEF` attack rows (can be cleared via `DELETE FROM attacks WHERE attack_type='BRIEF'`)
+- **ProtonVPN**: off at session close — would re-hijack `10.211.55.12` via utun8 if reconnected
+- **Disk**: 287 GiB free (was 102 MiB before session cleanup)
 
 ## What Worked
 
-- **Framing as "complete an unfinished feature"** — `process_ble_advertisement()`'s signature was already perfect for `bleak.AdvertisementData`. Tighter scope than "add Bluetooth" would have been.
-- **Advisor call mid-plan caught the UI gap** — scanner was incrementing `ble_detector.trackers` but never pushing into `recent_detections`. Drain pattern on each scan cycle fixed it cleanly.
-- **Advisor also flagged asyncio + eventlet conflicts early** — baked into design from the start: dedicated thread, fresh event loop, `threading.Lock()`, not dual rebinding.
-- **Pre-existing `prlctl exec` fallback in `fetch_kismet_devices()`** — direct HTTP from Mac to VM stopped working mid-capture; fallback kept the scan loop alive.
+- **Extract HTML first, then add SocketIO second** — staging the template extraction as a separate, byte-identical refactor before adding real-time features kept regressions to zero
+- **UI gating for attack types** — adding `UI_SURFACE_ATTACK_TYPES` allowlist at the emit step (not the classifier) preserved AttackerHunter's full audit trail while killing the false-positive banner storm on every passing randomized-MAC phone
+- **Rate-limit at the fan-out, persist without rate limit** — correct design for deauth floods: every alert is logged, UI gets a max of 1/sec/MAC with accumulated count
+- **Eventbus client designed with tests BEFORE integration** — WS + reconnect + shutdown tested via mock socket first, live integration was trivial after
+- **Reports bundle approach for off-session reference** — when user signaled session end + cross-project reference, 5-file markdown bundle on Desktop is easier to consume than chat history
+- **Greenfield design doc as a lens, not a prescription** — framing it as "if starting from scratch" surfaces architectural choices without requiring immediate action
 
 ## What Didn't Work
 
-- **Direct curl to `10.211.55.12:2501`** returned HTTP 000 with time=15s after user restarted Kismet, despite dashboard scans continuing to succeed. Never root-caused (prlctl path worked and ran out the clock). Possible bridge-mode networking hiccup.
-- **My "kill" on session-stop** hit the `nohup caffeinate` wrapper (PID 2203) but not the actual Python child — dashboard kept running ~45 min until hardware removal broke it. No harm, just a reminder to kill by process tree next time.
-- **User's paste broke `sudo systemctl enable --now ssh`** across a newline; still unresolved (TUI option requires sshd in VM).
+- **Proton VPN kill-switch + split-tunnel mutual exclusion** — per operator, Proton on macOS cannot have split-tunnel exclusions while kill-switch is on. This means eventbus (direct WS to VM) and Proton are mutually exclusive until a different workaround ships (prlctl-exec WS bridge, Parallels Bridged networking, or VM at a different subnet).
+- **RTL8814AU driver** stubbornly reverts to `type managed` via Kismet's cap helper in daemonize mode. Manual `iw` command works reliably but has to be issued after each VM restart.
+- **Parallels USB auto-connect** appears checkmarked in the menu but doesn't re-establish pass-through on VM resume. Requires manual uncheck+recheck. Parallels config-level auto-connect exists but isn't set.
+- **My initial Pi cost estimate was too low** ($100) — operator correctly noted retail reality is $175+ for the Pi 5 8GB alone; realistic kit is $270 minimum. Corrected in reports.
+- **Homebrew vs .venv Python confusion** bit the operator once — dashboard started with system Python and bleak absent; recovered by explicit `.venv/bin/python` invocation. Preflight check recommended.
 
 ## Next Steps
 
-1. **Decide commit scope** — all 4 modified + 2 new + `review_20260421/` are uncommitted. Suggest a single commit: `feat(ble): complete mac-native scanner path (bleak) + overnight validation`. User hasn't given the go-ahead yet.
-2. **Real wardrive with GPS lock** — 7 h indoor capture never populated `latitude`/`longitude` on any tracker row. An outdoor run with sky view will let `FOLLOWING` (30 min / 2+ locations) actually fire.
-3. **Reassess HN-009** ("Purchase BT adapter for BLE coverage") in `todo.md` — Mac-native scanning now covers passive advertisement capture (Find My / Tile / SmartTag). External adapter still valuable for active GATT probing or raw packet-level analysis, but no longer blocking for tracker detection.
-4. **HN-012 Cox Tier 2 call** — unchanged from last handoff, still pending human action.
+Operator is switching context to the `pentest/` directory. CYT-NG work pauses. Before resuming:
+
+### Priority 1 (platform stability — ~4 hours total)
+
+1. Install `realtek-rtl88xxau-dkms` in Kali VM (aircrack-ng fork, permanent monitor-mode fix)
+2. Add `unmanaged-devices=interface-name:wlan0` to VM's NetworkManager config
+3. Create `/etc/systemd/system/kismet.service` for auto-start on VM boot
+4. Parallels: Configure → Hardware → USB & Bluetooth → "Connect automatically" for 802.11ac NIC + u-blox GNSS
+5. Dashboard Python-env preflight (shebang + `bleak`/`flask_socketio` import check)
+
+### Priority 2 (capability expansion)
+
+6. **HackRF** — operator confirmed purchase planned regardless of project. When it arrives:
+   - Wire `imsi_detector.py` (stub exists, unwired) to HackRF + gr-gsm
+   - Add sub-GHz ISM scanner (433/868/915) for covert-tracker detection
+   - Add broadband spectrum panel to dashboard
+7. Wire `flock_detector.py` (stub exists, unwired) to dashboard
+8. Implement follower-candidate classifier per greenfield doc §6 (location clustering + temporal + co-occurrence rules)
+
+### Priority 3 (platform migration decision — 3 months out)
+
+9. **Decide**: stay Mac+VM vs migrate to dedicated Pi/Jetson sensor
+10. If migrating: execute Tier II build per `~/Desktop/CYT-NG-Reports-2026-04-22/02_Tier_II_Professional_Build_with_HackRF.md`
+
+### Priority 4 (long-term)
+
+11. LLM integration (Ollama-based natural-language alerts, profile reasoning)
+12. Watchlist UI port from Kivy GUI to web dashboard (Alpine.js modal)
+13. Mobile-first PWA rework of dashboard
+14. Consider annual professional TSCM sweep for dormant-device / wireline coverage that SDR cannot reach
 
 ## Blockers
 
-- None for CYT code. Still the longstanding HN-012 (external — requires phone call to Cox).
-- SSH into Kali VM for TUI requires `sudo systemctl start ssh` (one-line, inside VM console).
+- **None blocking immediate work**. Operator switched context voluntarily, not due to blockers.
+- **Pending (external)**: HN-012 Cox Tier 2 phone call still open from previous sessions (unchanged)
+- **Pending (VM config)**: all Priority 1 items are one-time setup, no dependencies beyond operator time
 
 ## Key Files
 
-### New
-- `macos_ble_scanner.py` — scanner module (`MacOSBLEScanner` class, `build_kismet_gps_fetcher()` helper)
-- `tests/test_macos_ble_scanner.py` — 13 unit tests
-- `review_20260421/all_detections.csv` — full DB export, 2,935 rows
-- `review_20260421/tracker_details.csv` — trackers with parsed `match_details`, 2,921 rows
-- `review_20260421/extract_tracker_details.py` — regeneration script
-- `logs/watchdog_overnight_20260421_024532.log` — 184 KB overnight capture log
-- `logs/wardrive_20260421_085846.log` — 359 KB morning extension log
+### New this session
+- `kismet_eventbus.py` — Kismet eventbus WS client
+- `templates/_base.html`, `templates/dashboard.html`, `templates/_panel_{detections,devices,alerts}.html` — mission-control UI
+- `static/css/mission_control.css` — NASA-grade dark theme with attack-banner flash
+- `static/js/socket_client.js` — SocketIO client, DOM updates, HTML-escape
+- `tests/test_socketio_emit.py` (7 tests)
+- `tests/test_attacker_integration.py` (2 tests)
+- `tests/test_kismet_eventbus.py` (6 tests)
+- `docs/GREENFIELD_MOBILE_SENSOR_DESIGN.md` — not committed (docs/ is gitignored)
 
 ### Modified
-- `requirements.txt` — added `bleak>=0.22` (pulls pyobjc-core + pyobjc-framework-CoreBluetooth)
-- `config.json` — `bluetooth_settings` block (enabled/gps_source/cache/thresholds/log_level)
-- `watchdog_dashboard.py` — shared `ble_detector_lock`, scanner lifecycle in `main()`, `_make_tracker_detection()` + drain pattern in `process_devices()`, `_drain_host_ble_only()` fallback
-- `watchdog_live.db` — +8 cameras, +2,921 trackers, +1 unknown from tonight
+- `watchdog_dashboard.py` — removed embedded HTML, added emit helpers + AttackerHunter wiring + eventbus client integration + UI-gating logic
+- `watchdog_reporter.py` — added `attacks` table + `log_attack()` + `get_recent_attacks()`
+- `attacker_hunter.py` — added `alert_callback` kwarg and invocation from `alert()`
+- `.gitignore` — added `attacker_detections.json`, `attacker_hunt.log` (runtime operational data)
 
-### Still load-bearing (unchanged)
-- `ble_tracker_detector.py` — `BLETrackerDetector` consumes the new scanner's output unmodified
-- `start_kismet_clean.sh` (on VM) — launcher for Kismet
+### Off-project (on Desktop)
+- `~/Desktop/CYT-NG-Reports-2026-04-22/` — 5-file professional report bundle
 
 ## Commands to Resume
 
 ```bash
-# Full test suite (run before any further changes)
+# Return to project
 cd ~/my_projects/0_active_projects/Chasing-Your-Tail-NG
-source venv_new/bin/activate
-python3 -m unittest discover -s tests
 
-# Re-launch overnight-style capture (after plugging Alfa + u-blox back in, start Kismet in VM)
-LOGFILE="logs/watchdog_$(date +%Y%m%d_%H%M%S).log"
-nohup caffeinate -dims python3 -u watchdog_dashboard.py \
-    --kismet-url http://10.211.55.12:2501 \
-    --kismet-user kismet --kismet-pass watchdog2026 \
-    --port 5002 --interval 10 > "$LOGFILE" 2>&1 &
-echo $! > logs/watchdog.pid
+# Check VM + Kismet state
+prlctl list --all
+prlctl exec "Kali Linux 2025.2 ARM64" "pgrep -a kismet; iw dev wlan0 info | grep type"
 
-# Dashboard view
-open http://127.0.0.1:5002
+# Restart Kismet if wlan0 lost monitor mode (almost guaranteed after VM restart)
+prlctl exec "Kali Linux 2025.2 ARM64" "sudo pkill -9 kismet; sleep 2; sudo ip link set wlan0 down; sudo iw dev wlan0 set type monitor; sudo ip link set wlan0 up; sudo /usr/bin/kismet -c wlan0 --daemonize --log-prefix /home/parallels/CYT/logs"
 
-# Review last capture
-sqlite3 watchdog_live.db "SELECT device_type, COUNT(*), SUM(seen_count) FROM detections GROUP BY device_type"
-sqlite3 watchdog_live.db "SELECT mac, manufacturer, seen_count FROM detections WHERE detection_method='ble_persistence'"  # FOLLOWING alerts
+# Start dashboard (remember .venv!)
+.venv/bin/python watchdog_dashboard.py --kismet-url http://10.211.55.12:2501 --kismet-pass watchdog2026 --eventbus
 
-# Regenerate tracker CSV
-python3 review_20260421/extract_tracker_details.py
+# Full test suite
+.venv/bin/python -m pytest tests/
 
-# Clean shutdown
-kill $(cat logs/watchdog.pid) && sleep 2 && pgrep -f watchdog_dashboard  # should be empty
-prlctl exec "Kali Linux 2025.2 ARM64" sudo killall -9 kismet
+# Open reports bundle for reference
+open ~/Desktop/CYT-NG-Reports-2026-04-22/
 ```
 
 ## Session Stats
 
-- Tests: **74 passing** (61 pre-existing + 13 new)
-- New code: `macos_ble_scanner.py` 222 lines, test file 250 lines
-- Overnight runtime: **7 h 0 m** end-to-end
-- Captured: 12 cameras, 2,921 BLE tracker IDs, 63,989 sightings
-- Zero crashes, zero test regressions, zero errors in the 7 h log
+- **Tests**: 94 passing (was 64) — +30 net
+- **New lines of production code**: ~550
+- **New test lines**: ~400
+- **Files created**: 13 (not counting reports bundle)
+- **Lines of documentation shipped**: ~3,900 (greenfield + reports bundle + this handoff)
+- **Disk freed**: 278 GiB
+- **Uncommitted work size**: ~1,500 diff lines ready for session-close commit

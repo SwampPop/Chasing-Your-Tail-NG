@@ -21,10 +21,11 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import requests
-from flask import Flask, render_template_string
+from flask import Flask, render_template
 from flask_socketio import SocketIO
 
 from alpr_context import ALPRContext
+from attacker_hunter import CONFIG as ATTACKER_CONFIG, AttackerHunter
 from ble_tracker_detector import BLETrackerDetector
 from camera_detector import CameraDetector
 from drone_signature_matcher import get_matcher as get_drone_matcher
@@ -46,6 +47,8 @@ ble_detector = BLETrackerDetector()
 alpr_ctx = ALPRContext()
 db_logger = DetectionLogger(db_path="watchdog_live.db")
 mac_ble_scanner = None  # MacOSBLEScanner, started from main() if enabled
+attacker_hunter = None  # AttackerHunter, instantiated in main()
+kismet_eventbus_client = None  # KismetEventbusClient, started if --eventbus
 scan_stats = {
     "total_devices": 0,
     "cameras": 0,
@@ -58,131 +61,27 @@ scan_stats = {
     "nearby_alprs": 0,
     "last_update": "",
     "kismet_status": "connecting",
+    "scan_count": 0,
+    "start_ts": time.time(),
 }
 recent_detections = []
 all_devices = []
+recent_attacks = []  # rolling buffer shown in the Active Attacks panel
 
-DASHBOARD_HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>WATCHDOG Live Dashboard</title>
-<meta http-equiv="refresh" content="10">
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #0a0a0a; color: #c0c0c0; font-family: 'Courier New', monospace; padding: 15px; }
-h1 { color: #00ff41; font-size: 22px; margin-bottom: 3px; }
-.subtitle { color: #555; font-size: 12px; margin-bottom: 15px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 15px; }
-.stat { background: #111; border: 1px solid #333; border-radius: 6px; padding: 12px; text-align: center; }
-.stat .num { font-size: 28px; font-weight: bold; }
-.stat .label { font-size: 10px; color: #666; text-transform: uppercase; }
-.green { color: #00ff41; }
-.red { color: #ff4444; }
-.orange { color: #ff8800; }
-.cyan { color: #00bcd4; }
-.yellow { color: #ffaa00; }
-.purple { color: #aa44ff; }
-.panel { background: #111; border: 1px solid #333; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
-.panel h2 { color: #00aaff; font-size: 14px; margin-bottom: 8px; border-bottom: 1px solid #222; padding-bottom: 4px; }
-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-th { text-align: left; color: #666; padding: 4px 6px; border-bottom: 1px solid #333; }
-td { padding: 4px 6px; border-bottom: 1px solid #1a1a1a; }
-.alert-row { background: #1a0000; }
-.alert-row td { color: #ff4444; }
-.drone-row { background: #1a1000; }
-.drone-row td { color: #ff8800; }
-.camera-row { background: #001a1a; }
-.camera-row td { color: #00bcd4; }
-.badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; }
-.badge-alpr { background: #ff4444; color: white; }
-.badge-camera { background: #00bcd4; color: black; }
-.badge-drone { background: #ff8800; color: black; }
-.badge-tracker { background: #aa44ff; color: white; }
-.badge-clear { background: #00ff41; color: black; }
-.kismet-status { position: absolute; top: 15px; right: 15px; }
-.blink { animation: blink 1s infinite; }
-@keyframes blink { 50% { opacity: 0.3; } }
-</style>
-</head>
-<body>
+# Rate-limit attack_alert emits to 1/sec/MAC — a deauth flood can fire 100s of
+# callbacks per second, and the browser doesn't need every one. Each entry is
+# {mac: (last_emit_ts, accumulated_count)}. Persistence is unaffected.
+_ATTACK_EMIT_MIN_INTERVAL = 1.0
+_attack_emit_state = {}
+_attack_emit_lock = threading.Lock()
 
-<div class="kismet-status">
-    <span class="badge {% if kismet_status == 'live' %}badge-clear{% else %}badge-alpr{% endif %}">
-        KISMET: {{ kismet_status | upper }}
-    </span>
-</div>
-
-<h1>WATCHDOG LIVE DASHBOARD</h1>
-<div class="subtitle">Surveillance Device Detection | {{ last_update }} | Kismet: {{ kismet_url }}</div>
-{% if operator_lat and operator_lon %}
-<div class="subtitle">
-    GPS: {{ "%.4f"|format(operator_lat) }}, {{ "%.4f"|format(operator_lon) }}
-    {% if coverage_area %} | Area: <span class="yellow">{{ coverage_area }}</span>{% endif %}
-    {% if nearby_alprs %} | <span class="red">{{ nearby_alprs }} known ALPR{{ 's' if nearby_alprs != 1 else '' }} within 200m</span>{% endif %}
-</div>
-{% endif %}
-
-<div class="grid">
-    <div class="stat"><div class="num cyan">{{ total_devices }}</div><div class="label">Total Devices</div></div>
-    <div class="stat"><div class="num {% if cameras > 0 %}red{% else %}green{% endif %}">{{ cameras }}</div><div class="label">Cameras</div></div>
-    <div class="stat"><div class="num {% if alprs > 0 %}red{% else %}green{% endif %}">{{ alprs }}</div><div class="label">ALPR</div></div>
-    <div class="stat"><div class="num {% if drones > 0 %}orange{% else %}green{% endif %}">{{ drones }}</div><div class="label">Drones</div></div>
-    <div class="stat"><div class="num {% if trackers > 0 %}purple{% else %}green{% endif %}">{{ trackers }}</div><div class="label">BLE Trackers</div></div>
-    <div class="stat"><div class="num green">{{ clean }}</div><div class="label">Clean</div></div>
-</div>
-
-{% if detections %}
-<div class="panel" style="border-color: #ff4444;">
-    <h2 style="color: #ff4444;">DETECTIONS ({{ detections|length }})</h2>
-    <table>
-        <tr><th>Type</th><th>Manufacturer</th><th>MAC</th><th>SSID</th><th>RSSI</th><th>CH</th><th>Conf</th><th>Method</th></tr>
-        {% for d in detections %}
-        <tr class="{% if d.device_type == 'alpr' %}alert-row{% elif d.device_type == 'drone' %}drone-row{% else %}camera-row{% endif %}">
-            <td><span class="badge badge-{{ d.device_type }}">{{ d.device_type | upper }}</span></td>
-            <td>{{ d.manufacturer }}</td>
-            <td>{{ d.mac }}</td>
-            <td>{{ d.ssid or '-' }}</td>
-            <td>{{ d.rssi }} dBm</td>
-            <td>{{ d.channel }}</td>
-            <td>{{ "%.0f"|format(d.confidence * 100) }}%</td>
-            <td>{{ d.detection_method }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</div>
-{% else %}
-<div class="panel" style="border-color: #00ff41;">
-    <h2 style="color: #00ff41;">ALL CLEAR</h2>
-    <p style="color: #00ff41; text-align: center; padding: 20px;">No surveillance devices detected in current scan</p>
-</div>
-{% endif %}
-
-<div class="panel">
-    <h2>ALL DEVICES ({{ all_devices|length }} shown, {{ total_devices }} total)</h2>
-    <table>
-        <tr><th>MAC</th><th>Manufacturer</th><th>Type</th><th>Name/SSID</th><th>RSSI</th><th>CH</th><th>Status</th></tr>
-        {% for d in all_devices[:50] %}
-        <tr>
-            <td>{{ d.mac }}</td>
-            <td>{{ d.manuf }}</td>
-            <td>{{ d.type }}</td>
-            <td>{{ d.name }}</td>
-            <td>{{ d.signal }} dBm</td>
-            <td>{{ d.channel }}</td>
-            <td>{% if d.flagged %}<span class="badge badge-{{ d.flag_type }}">{{ d.flag_type | upper }}</span>{% else %}<span style="color:#333;">clean</span>{% endif %}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</div>
-
-<div class="subtitle" style="text-align: center; margin-top: 10px;">
-    WATCHDOG / CYT-NG / ARES-1 | Auto-refresh: 10s | Phase 1: Passive Detection Only
-</div>
-</body>
-</html>
-"""
-
+# Only surface these attack types to the UI banner + recent_attacks buffer.
+# AttackerHunter's softer heuristics (BRIEF, STRONG_GHOST, SUSPICIOUS) fire on
+# ordinary probe traffic — every modern phone with MAC randomization trips them
+# — so they persist to the attacks table for forensic review but don't flash
+# the banner. Real active attacks (DEAUTH/DISASSOC from Kismet alerts, or a
+# device probing for our own networks) still do.
+UI_SURFACE_ATTACK_TYPES = {"DEAUTH", "DISASSOC", "TARGETING"}
 
 def fetch_kismet_devices(kismet_url, username, password, last_seconds=30):
     """Fetch recent devices from Kismet REST API.
@@ -421,8 +320,8 @@ def dashboard():
     total = scan_stats['total_devices']
     flagged = (scan_stats['cameras'] + scan_stats['alprs']
                + scan_stats['drones'] + scan_stats['trackers'])
-    return render_template_string(
-        DASHBOARD_HTML,
+    return render_template(
+        'dashboard.html',
         total_devices=total,
         cameras=scan_stats['cameras'],
         alprs=scan_stats['alprs'],
@@ -431,6 +330,7 @@ def dashboard():
         clean=max(total - flagged, 0),
         detections=recent_detections,
         all_devices=all_devices,
+        attacks=recent_attacks,
         last_update=scan_stats['last_update'],
         kismet_status=scan_stats['kismet_status'],
         kismet_url=app.config.get('KISMET_URL', ''),
@@ -496,6 +396,221 @@ def _drain_host_ble_only():
     })
 
 
+def _classify_attack(alert_data):
+    """Map an AttackerHunter alert dict to (attack_type, severity, count).
+
+    attack_type comes from the first flag that matches a known pattern;
+    severity uses the flag set + signal strength; count is extracted from
+    DEAUTH_SOURCE:N if present. Kept local so the attacker_hunter module
+    stays UI-agnostic."""
+    flags = alert_data.get("flags") or []
+    attack_type = "SUSPICIOUS"
+    count = 1
+    for f in flags:
+        head = f.split(":", 1)[0]
+        if head == "DEAUTH_SOURCE":
+            attack_type = "DEAUTH"
+            try:
+                count = int(f.split(":", 1)[1])
+            except (IndexError, ValueError):
+                count = 1
+            break
+        if head == "BRIEF_APPEARANCE":
+            attack_type = "BRIEF"
+        elif head == "STRONG_SIGNAL" and attack_type == "SUSPICIOUS":
+            attack_type = "STRONG_GHOST"
+        elif head.startswith("TARGETING"):
+            attack_type = "TARGETING"
+            break
+    # Severity: DEAUTH/TARGETING always critical; BRIEF + STRONG combo = high;
+    # anything else = medium. Low is reserved for future, softer signals.
+    if attack_type in ("DEAUTH", "TARGETING"):
+        severity = "critical"
+    elif attack_type in ("BRIEF", "STRONG_GHOST") and (alert_data.get("signal") or -100) > -50:
+        severity = "high"
+    else:
+        severity = "med"
+    return attack_type, severity, count
+
+
+def on_attack_alert(alert_data):
+    """AttackerHunter callback: persist, append to rolling buffer, fan out.
+
+    Runs on the scan thread (AttackerHunter calls its own alert() from
+    process_kismet_alerts which we invoke from scan_loop). Rate-limited
+    per-MAC so a deauth flood doesn't thrash the socket. Persistence is
+    never throttled."""
+    attack_type, severity, count = _classify_attack(alert_data)
+    mac = alert_data.get("mac", "")
+    ts = time.time()
+    payload = {
+        "ts": ts,
+        "mac": mac,
+        "attack_type": attack_type,
+        "severity": severity,
+        "reason": alert_data.get("reason", ""),
+        "signal": alert_data.get("signal", 0) or 0,
+        "count": count,
+        "evidence": {
+            "flags": alert_data.get("flags", []),
+            "duration_s": alert_data.get("duration", 0),
+            "locations": alert_data.get("locations", []),
+        },
+    }
+
+    # Persist every alert — cheap, full audit trail. UI surfacing is gated
+    # separately below so false-positive heuristics don't flash the banner.
+    try:
+        db_logger.log_attack(payload)
+    except Exception as e:
+        logger.debug("watchdog_live.db attacks write failed for %s: %s", mac, e)
+
+    if attack_type not in UI_SURFACE_ATTACK_TYPES:
+        return
+
+    # Keep a rolling buffer so the initial page render shows recent attacks.
+    recent_attacks.insert(0, {**payload,
+                              "ts_human": datetime.fromtimestamp(ts).strftime("%H:%M:%S")})
+    del recent_attacks[200:]
+
+    # Rate-limit emit: 1/sec/MAC. Accumulated count is shipped in the next emit.
+    with _attack_emit_lock:
+        last_ts, pending = _attack_emit_state.get(mac, (0.0, 0))
+        if ts - last_ts < _ATTACK_EMIT_MIN_INTERVAL:
+            _attack_emit_state[mac] = (last_ts, pending + 1)
+            return
+        payload["count"] = max(count, pending + 1) if pending else count
+        _attack_emit_state[mac] = (ts, 0)
+
+    try:
+        socketio.emit("attack_alert", payload)
+    except Exception as e:
+        logger.debug("socketio emit attack_alert failed: %s", e)
+
+
+def _emit_system_status(kismet_up):
+    """Emit a system_status tick. Safe to call from the scan thread."""
+    try:
+        socketio.emit("system_status", {
+            "kismet_up": bool(kismet_up),
+            "ble_scanner_up": bool(mac_ble_scanner and mac_ble_scanner.is_running())
+                              if hasattr(mac_ble_scanner, "is_running") else bool(mac_ble_scanner),
+            "gps_lock": scan_stats.get("operator_lat") is not None
+                        and scan_stats.get("operator_lon") is not None,
+            "gps_lat": scan_stats.get("operator_lat"),
+            "gps_lon": scan_stats.get("operator_lon"),
+            "coverage_area": scan_stats.get("coverage_area"),
+            "nearby_alprs": scan_stats.get("nearby_alprs", 0),
+            "last_update": scan_stats.get("last_update", ""),
+            "scan_count": scan_stats.get("scan_count", 0),
+            "uptime_s": time.time() - scan_stats.get("start_ts", time.time()),
+        })
+    except Exception as e:
+        logger.debug("socketio emit system_status failed: %s", e)
+
+
+def _emit_device_update():
+    """Emit a device_update tick with current counts."""
+    total = scan_stats.get("total_devices", 0)
+    flagged = (scan_stats.get("cameras", 0) + scan_stats.get("alprs", 0)
+               + scan_stats.get("drones", 0) + scan_stats.get("trackers", 0))
+    try:
+        socketio.emit("device_update", {
+            "count_total": total,
+            "count_clean": max(total - flagged, 0),
+            "by_type": {
+                "cameras": scan_stats.get("cameras", 0),
+                "alpr": scan_stats.get("alprs", 0),
+                "drones": scan_stats.get("drones", 0),
+                "ble_trackers": scan_stats.get("trackers", 0),
+            },
+        })
+    except Exception as e:
+        logger.debug("socketio emit device_update failed: %s", e)
+
+
+def _run_attacker_hunter_pass(devices, kismet_alerts_fetcher=None):
+    """Feed the AttackerHunter its usual inputs from our already-fetched data.
+
+    AttackerHunter's process_kismet_alerts() only fires callbacks for MACs it
+    has already seen via analyze_device(), so we pre-populate tracking from
+    the same devices the rest of the scan loop is working on (no duplicate
+    Kismet fetch). When the eventbus client is connected, we skip the REST
+    alert fetch here — the eventbus gives sub-second latency and would
+    double-fire otherwise."""
+    if attacker_hunter is None:
+        return
+    try:
+        for dev in devices:
+            info = attacker_hunter.extract_device_info(dev)
+            if info:
+                tracking = attacker_hunter.analyze_device(info)
+                attacker_hunter.check_suspicious_patterns(tracking)
+        attacker_hunter.check_disappeared_devices()
+        if kismet_eventbus_client is not None and kismet_eventbus_client.is_connected():
+            return
+        alerts = (kismet_alerts_fetcher or attacker_hunter.fetch_kismet_alerts)()
+        if alerts:
+            attacker_hunter.process_kismet_alerts(alerts)
+    except Exception as e:
+        logger.debug("attacker_hunter pass failed: %s", e)
+
+
+# --- Eventbus integration ------------------------------------------------
+
+import re as _re  # local alias to keep module-top imports clean
+_KISMET_MAC_RE = _re.compile(r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}")
+
+
+def _kismet_alert_to_attack_dict(payload):
+    """Transform a Kismet eventbus ALERT payload into on_attack_alert input.
+
+    Kismet alerts carry `kismet.alert.header` (DEAUTHFLOOD / DISASSOCFLOOD /
+    APSPOOF / ...), `kismet.alert.text` (human reason), and sometimes
+    `kismet.alert.source` (MAC). When source is missing, fall back to
+    regex-scraping the text — matches AttackerHunter's existing approach."""
+    header = str(payload.get("kismet.alert.header", "")).upper()
+    text = payload.get("kismet.alert.text", "")
+    mac = payload.get("kismet.alert.source", "") or ""
+    if not mac:
+        m = _KISMET_MAC_RE.search(text)
+        if m:
+            mac = m.group(0).upper()
+
+    flags = []
+    if "DEAUTH" in header:
+        flags.append("DEAUTH_SOURCE:1")
+    elif "DISASSOC" in header:
+        flags.append("DEAUTH_SOURCE:1")  # map to our DEAUTH classifier bucket
+    elif "APSPOOF" in header or "KARMA" in header:
+        flags.append("TARGETING_OUR_NETWORKS:kismet_alert")
+    else:
+        flags.append(f"KISMET_ALERT:{header}")
+
+    return {
+        "mac": mac or "00:00:00:00:00:00",
+        "reason": text or header,
+        "flags": flags,
+        "signal": payload.get("kismet.alert.signal", 0) or 0,
+        "duration": 0,
+        "locations": [],
+    }
+
+
+def _handle_eventbus_message(topic, payload):
+    """Dispatch a single Kismet eventbus event to the existing pipelines."""
+    if topic == "ALERT":
+        try:
+            alert = _kismet_alert_to_attack_dict(payload)
+            on_attack_alert(alert)
+        except Exception as e:
+            logger.debug("eventbus ALERT handling failed: %s", e)
+    elif topic == "TIMESTAMP":
+        # 1-Hz Kismet heartbeat — flip kismet_status to live without waiting
+        # for the next device poll. Cheap; no emit here to avoid spam.
+        scan_stats["kismet_status"] = "live"
+
+
 def scan_loop(kismet_url, username, password, interval=10):
     """Background thread: continuously fetch and process Kismet data."""
     while True:
@@ -513,6 +628,12 @@ def scan_loop(kismet_url, username, password, interval=10):
                     'nearby_alprs': summary.get('nearby_cameras', 0),
                 })
 
+            _run_attacker_hunter_pass(devices)
+
+            scan_stats['scan_count'] = scan_stats.get('scan_count', 0) + 1
+            _emit_system_status(kismet_up=True)
+            _emit_device_update()
+
             logger.info(
                 f"Scan: {len(devices)} devices, "
                 f"{scan_stats['cameras']} cameras, "
@@ -522,6 +643,9 @@ def scan_loop(kismet_url, username, password, interval=10):
             )
         else:
             _drain_host_ble_only()
+            scan_stats['scan_count'] = scan_stats.get('scan_count', 0) + 1
+            _emit_system_status(kismet_up=False)
+            _emit_device_update()
         time.sleep(interval)
 
 
@@ -547,9 +671,25 @@ def main():
                         help='Dashboard port')
     parser.add_argument('--interval', type=int, default=10,
                         help='Scan interval in seconds')
+    parser.add_argument('--eventbus', action='store_true',
+                        help='Subscribe to Kismet /eventbus/events.ws for '
+                             'sub-second alert latency. Falls back to REST '
+                             'polling if connect fails.')
     args = parser.parse_args()
 
     app.config['KISMET_URL'] = args.kismet_url
+
+    # Instantiate AttackerHunter (deauth/disassoc + behavioral attack detection).
+    # alert_sound=False so it doesn't shell out to `say`/`afplay` from a daemon;
+    # browser audio is a Phase-2 opt-in. The alert_callback fans out to the
+    # SocketIO `attack_alert` channel and persists to the attacks table.
+    global attacker_hunter
+    hunter_cfg = dict(ATTACKER_CONFIG)
+    hunter_cfg["kismet_api"] = args.kismet_url
+    hunter_cfg["kismet_user"] = args.kismet_user
+    hunter_cfg["kismet_pass"] = args.kismet_pass
+    hunter_cfg["alert_sound"] = False
+    attacker_hunter = AttackerHunter(hunter_cfg, alert_callback=on_attack_alert)
 
     # Start background scan thread
     scan_thread = threading.Thread(
@@ -612,6 +752,30 @@ def main():
     print(f"  Camera OUIs: {len(detector.camera_ouis)}")
     print(f"  ALPR patterns: {len(detector.alpr_ssid_patterns)}")
     print(f"  Host BLE: {'on' if mac_ble_scanner else 'off'}")
+    print(f"  Attacker hunter: on (deauth/disassoc/behavioral)")
+
+    # Optional: Kismet eventbus for sub-second alert push.
+    global kismet_eventbus_client
+    if args.eventbus:
+        try:
+            from kismet_eventbus import KismetEventbusClient
+            kismet_eventbus_client = KismetEventbusClient(
+                kismet_url=args.kismet_url,
+                username=args.kismet_user,
+                password=args.kismet_pass,
+                dispatch_fn=_handle_eventbus_message,
+            )
+            kismet_eventbus_client.start()
+            atexit.register(kismet_eventbus_client.stop)
+            print(f"  Kismet eventbus: subscribing (ALERT, TIMESTAMP)")
+        except Exception as e:
+            logger.warning("Kismet eventbus failed to start: %s "
+                           "(falling back to REST polling)", e)
+            kismet_eventbus_client = None
+            print(f"  Kismet eventbus: disabled (start failed)")
+    else:
+        print(f"  Kismet eventbus: off (use --eventbus to enable)")
+
     print(f"{'='*60}\n")
 
     bind_host = os.getenv("BIND_HOST", "127.0.0.1")
